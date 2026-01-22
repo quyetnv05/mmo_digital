@@ -1,0 +1,243 @@
+// Cấu trúc Database MMO - Phiên bản tối ưu PostgreSQL
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. Quản lý Người dùng và Ví
+model User {
+  id                Int           @id @default(autoincrement())
+  username          String        @unique
+  email             String        @unique
+  password          String
+  balance           Decimal       @default(0) @db.Decimal(15, 2)
+  pendingBalance    Decimal       @default(0) @db.Decimal(15, 2) // Tiền đang treo bảo hành (Escrow)
+  role              Role          @default(BUYER)
+  status            UserStatus    @default(ACTIVE)
+  sellerLevel       SellerLevel   @default(BRONZE) // Fee Tier
+  twoFactorSecret   String?
+  telegramId        String?       // Chat ID for notifications
+  createdAt         DateTime      @default(now())
+  
+  // Các quan hệ (Relationships)
+  products          Product[]     // Sản phẩm người này bán
+  orders            Order[]       // Đơn hàng đã mua
+  transactions      Transaction[] // Lịch sử nạp/rút/mua
+  disputes          Dispute[]     // Các khiếu nại liên quan
+  processedPayments ProcessedPayment[] 
+  balanceAudits     BalanceAudit[] // Nhật ký biến động số dư chi tiết
+  userLogs          UserLog[]      // Nhật ký đăng nhập/bảo mật
+  withdrawalRequests WithdrawalRequest[] // QUAN TRỌNG: Thêm dòng này để sửa lỗi P1012
+}
+
+enum Role {
+  ADMIN
+  SELLER
+  BUYER
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+}
+
+enum SellerLevel {
+  BRONZE
+  SILVER
+  GOLD
+  DIAMOND
+}
+
+// 2. Quản lý Sản phẩm và Danh mục
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String
+  slug     String    @unique
+  products Product[]
+}
+
+model Product {
+  id            Int           @id @default(autoincrement())
+  name          String
+  variant       String?       // e.g. "Old Gmail", "Fresh Gmail"
+  format        String        @default("USER|PASS") // e.g. USER|PASS|COOKIE
+  description   String?
+  price         Decimal       @db.Decimal(15, 2)
+  sellerId      Int
+  seller        User          @relation(fields: [sellerId], references: [id])
+  categoryId    Int
+  category      Category      @relation(fields: [categoryId], references: [id])
+  warrantyHours Int           @default(24) // Thời gian bảo hành
+  status        ProductStatus @default(ACTIVE)
+  
+  items         ProductItem[] 
+  orders        Order[]
+}
+
+enum ProductStatus {
+  ACTIVE
+  HIDDEN
+  DELETED
+}
+
+// 3. Quản lý Kho hàng (Chống bán trùng bằng Hash)
+model ProductItem {
+  id          Int      @id @default(autoincrement())
+  productId   Int
+  product     Product  @relation(fields: [productId], references: [id])
+  content     String   // Định dạng: user|pass|cookie...
+  contentHash String   @unique // Dùng SHA-256 hash để ngăn seller đăng trùng dữ liệu
+  metadata    Json?    // Lưu proxy, device info
+  addedAt     DateTime @default(now())
+  isSold      Boolean  @default(false)
+  soldAt      DateTime? 
+  orderId     Int?
+  order       Order?   @relation(fields: [orderId], references: [id])
+}
+
+// 4. Đơn hàng và Hệ thống Escrow
+model Order {
+  id             Int           @id @default(autoincrement())
+  buyerId        Int
+  buyer          User          @relation(fields: [buyerId], references: [id])
+  productId      Int
+  product        Product       @relation(fields: [productId], references: [id])
+  quantity       Int
+  totalPrice     Decimal       @db.Decimal(15, 2)
+  status         OrderStatus   @default(COMPLETED)
+  escrowDeadline DateTime      // Thời điểm hết hạn bảo hành để giải ngân cho Seller
+  isReleased     Boolean       @default(false) // Đã giải ngân cho Seller chưa
+  createdAt      DateTime      @default(now())
+  
+  items          ProductItem[]
+  disputes       Dispute[]
+}
+
+enum OrderStatus {
+  COMPLETED
+  DISPUTED
+  REFUNDED
+}
+
+// 5. Giao dịch tài chính
+model Transaction {
+  id            Int               @id @default(autoincrement())
+  userId        Int
+  user          User              @relation(fields: [userId], references: [id])
+  amount        Decimal           @db.Decimal(15, 2)
+  type          TransactionType
+  status        TransactionStatus @default(SUCCESS)
+  referenceCode String?           @unique // Mã nạp tiền định danh
+  createdAt     DateTime          @default(now())
+}
+
+enum TransactionType {
+  DEPOSIT   
+  WITHDRAW  
+  PURCHASE  
+  EARNING   
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+// 6. Khiếu nại (Dispute)
+model Dispute {
+  id        Int           @id @default(autoincrement())
+  orderId   Int
+  order     Order         @relation(fields: [orderId], references: [id])
+  openedBy  Int
+  user      User          @relation(fields: [openedBy], references: [id])
+  reason    String
+  status    DisputeStatus @default(OPEN)
+  createdAt DateTime      @default(now())
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED_REFUNDED
+  RESOLVED_RELEASED
+}
+
+// 7. Chống trùng nạp tiền (Webhook Idempotency)
+model ProcessedPayment {
+  id            Int      @id @default(autoincrement())
+  referenceCode String   @unique 
+  userId        Int
+  user          User     @relation(fields: [userId], references: [id])
+  amount        Decimal  @db.Decimal(15, 2)
+  processedAt   DateTime @default(now())
+}
+
+// 8. Cấu hình Hệ thống (Admin Settings)
+model SystemSetting {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       String
+  group       String   @default("GENERAL") // GENERAL, FINANCE, SUPPORT
+  type        String   @default("string")  // string, number, boolean, json
+  description String?
+  isPublic    Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+}
+
+// 9. Financial Ledger (Double-entry bookkeeping)
+model BalanceAudit {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  amount      Decimal   @db.Decimal(15, 2)
+  type        AuditType
+  reason      String    // ORDER, DEPOSIT, WITHDRAW, FEE, REFUND, ADJUSTMENT
+  oldBalance  Decimal   @db.Decimal(15, 2)
+  newBalance  Decimal   @db.Decimal(15, 2)
+  referenceId String?   // Order ID, Transaction ID
+  description String?
+  createdAt   DateTime  @default(now())
+}
+
+enum AuditType {
+  CREDIT // + Money
+  DEBIT  // - Money
+}
+
+// 10. Security & Anti-Fraud
+model UserLog {
+  id          Int      @id @default(autoincrement())
+  userId      Int?      // Nullable for failed login attempts (Optional: make it strict if you want relations)
+  user        User?     @relation(fields: [userId], references: [id])
+  action      String    // LOGIN, PURCHASE, PASSWORD_CHANGE, WITHDRAW_REQUEST
+  ipAddress   String
+  userAgent   String?
+  fingerprint String?   // Device fingerprint hash
+  details     Json?     // Extra details
+  createdAt   DateTime  @default(now())
+}
+
+// 11. Withdrawal Request
+model WithdrawalRequest {
+  id              Int              @id @default(autoincrement())
+  userId          Int
+  user            User             @relation(fields: [userId], references: [id])
+  amount          Decimal          @db.Decimal(15, 2)
+  bankName        String
+  accountNumber   String
+  accountName     String
+  status          WithdrawalStatus @default(PENDING)
+  rejectionReason String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
