@@ -4,14 +4,16 @@ import { prisma } from '@/lib/prisma';
 export async function POST(req: NextRequest) {
     try {
         // Lấy Key từ Vercel Env, nếu không có thì dùng key mặc định bạn đã đặt
-        const SEPAY_API_KEY = process.env.SEPAY_API_KEY || 'MMO_Digital_2402_@!';
-
+        const SEPAY_API_KEY = 'MMO_Digital_2402_@!';
         // SePay gửi Key trong header Authorization: "Apikey MMO_Digital_2402_@!"
         const authHeader = req.headers.get('Authorization') || '';
         const receivedKey = authHeader.replace('Apikey ', '').trim();
 
-        if (receivedKey !== SEPAY_API_KEY) {
-            console.error('Sai mã bảo mật!');
+        console.log('--- DEBUG WEBHOOK ---');
+        console.log('Header nhan duoc:', authHeader);
+        console.log('Key mong doi:', `Apikey ${SEPAY_API_KEY}`);
+
+        if (authHeader !== `Apikey ${SEPAY_API_KEY}`) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
 
