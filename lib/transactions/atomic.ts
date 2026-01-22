@@ -211,7 +211,7 @@ export async function releaseEscrowFunds() {
         },
     });
 
-    const results = [];
+    const results: { orderId: number; sellerId: number; amount: number; releasedAt: Date }[] = [];
 
     for (const order of expiredOrders) {
         try {
@@ -228,12 +228,11 @@ export async function releaseEscrowFunds() {
                     },
                 });
 
-                // Mark order as released
+                // Mark order as released (only isReleased exists in schema)
                 await tx.order.update({
                     where: { id: order.id },
                     data: {
                         isReleased: true,
-                        releasedAt: now,
                     },
                 });
 
@@ -320,12 +319,13 @@ export async function processDeposit(
         });
 
         // Create ProcessedPayment record to prevent duplicates
+        // Create ProcessedPayment record to prevent duplicates
+        // Note: Schema only has userId, amount, referenceCode, processedAt
         await tx.processedPayment.create({
             data: {
                 userId,
                 amount,
                 referenceCode,
-                transactionId,
             },
         });
 

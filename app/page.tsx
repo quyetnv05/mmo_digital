@@ -168,6 +168,7 @@ function FilterSection({
 export default function HomePage() {
     const [products, setProducts] = useState<Product[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [wishlistIds, setWishlistIds] = useState<Set<number>>(new Set());
 
     // Filter States
     const [search, setSearch] = useState('');
@@ -176,6 +177,19 @@ export default function HomePage() {
     const [maxPrice, setMaxPrice] = useState('');
     const [sort, setSort] = useState('newest');
     const [inStockOnly, setInStockOnly] = useState(false);
+
+    // Fetch user's wishlist on mount
+    useEffect(() => {
+        fetch('/api/wishlist')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.data) {
+                    const ids = data.data.map((item: any) => item.product.id);
+                    setWishlistIds(new Set(ids));
+                }
+            })
+            .catch(() => { }); // Silently fail if not logged in
+    }, []);
 
     // Debounce Search
     useEffect(() => {
@@ -256,6 +270,7 @@ export default function HomePage() {
                                 <ProductCard
                                     key={product.id}
                                     product={product}
+                                    initialWishlistState={wishlistIds.has(product.id)}
                                 />
                             ))
                         ) : (

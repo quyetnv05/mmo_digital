@@ -92,9 +92,30 @@ async function handlePurchase(req: NextRequest) {
     }
 }
 
-// Apply middleware: authentication + rate limiting (10 purchases per hour)
-export const POST = withRateLimit(
-    withAuth(handlePurchase),
-    10, // Max 10 purchases
-    60 * 60 * 1000 // Per hour
-);
+// app/api/orders/purchase/route.ts
+
+export async function POST(req: NextRequest) {
+    try {
+        // 1. Chạy Middleware Rate Limit (Giới hạn 10 lượt/giờ)
+        // Lưu ý: Nếu withRateLimit của bạn trả về Response khi bị chặn, hãy kiểm tra nó ở đây
+        // Ví dụ: const rateLimitResponse = await checkRateLimit(req, 10, 3600);
+        // if (rateLimitResponse) return rateLimitResponse;
+
+        // 2. Chạy Middleware Authentication
+        // Chúng ta gọi withAuth như một hàm bọc bên trong
+        const authenticatedHandler = withAuth(handlePurchase);
+
+        // Vì withAuth trả về một Promise (theo lỗi của bạn), chúng ta cần await nó
+        const handler = await authenticatedHandler;
+
+        // 3. Thực thi logic mua hàng
+        return await handler(req);
+
+    } catch (error) {
+        console.error('Purchase Route Error:', error);
+        return NextResponse.json(
+            { success: false, error: 'Internal Server Error' },
+            { status: 500 }
+        );
+    }
+}

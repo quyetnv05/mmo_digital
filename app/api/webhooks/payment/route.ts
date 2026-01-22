@@ -34,72 +34,105 @@ export async function POST(req: Request) {
 
         for (const tx of transactions) {
             const { id, content, amount } = tx;
-            const referenceCode = String(id); // Casso Transaction ID
+            const webhookRefCode = String(id); // Casso Transaction ID for idempotency
 
-            // 2. Idempotency Check
+            // 2. Idempotency Check - prevent duplicate processing
             const existing = await prisma.processedPayment.findUnique({
-                where: { referenceCode }
+                where: { referenceCode: webhookRefCode }
             });
             if (existing) continue; // Already processed
 
-            // 3. Parse User ID from Content (e.g., "NAP 123", "NAP 12345")
-            const match = content.match(/NAP\s*(\d+)/i);
-            if (!match) continue; // Invalid content format
-
-            const userId = parseInt(match[1]);
             const depositAmount = parseFloat(amount);
 
-            // 4. Atomic Processing
+            // 3. Try to match reference code formats
+            // Format 1 (New): "MMO123456" - Look up existing pending transaction
+            // Format 2 (Legacy): "NAP 123" - Use user ID directly
+
+            let userId: number | null = null;
+            let pendingTransaction: any = null;
+
+            // Check for MMO format first
+            const mmoMatch = content.match(/MMO\s*(\d{6})/i);
+            if (mmoMatch) {
+                const mmoCode = `MMO${mmoMatch[1]}`;
+                // Find the pending transaction by referenceCode
+                pendingTransaction = await prisma.transaction.findUnique({
+                    where: { referenceCode: mmoCode }
+                });
+                if (pendingTransaction && pendingTransaction.status === 'PENDING') {
+                    userId = pendingTransaction.userId;
+                }
+            }
+
+            // Fallback to NAP format (legacy)
+            if (!userId) {
+                const napMatch = content.match(/NAP\s*(\d+)/i);
+                if (napMatch) {
+                    userId = parseInt(napMatch[1]);
+                }
+            }
+
+            if (!userId) continue; // No valid format found
+
+            // 4. Atomic Processing with Prisma Transaction
             await prisma.$transaction(async (prismaTx) => {
-                // Verify User
-                const user = await prismaTx.user.findUnique({ where: { id: userId } });
+                // Verify User exists
+                const user = await prismaTx.user.findUnique({ where: { id: userId! } });
                 if (!user) return; // User not found
 
                 // A. Create ProcessedPayment (Lock Idempotency)
                 await prismaTx.processedPayment.create({
                     data: {
-                        referenceCode,
-                        userId,
+                        referenceCode: webhookRefCode,
+                        userId: userId!,
                         amount: depositAmount
                     }
                 });
 
-                // B. Credit User Balance
+                // B. If there's a pending transaction from MMO format, update it
+                if (pendingTransaction) {
+                    await prismaTx.transaction.update({
+                        where: { id: pendingTransaction.id },
+                        data: { status: 'SUCCESS' }
+                    });
+                } else {
+                    // C. Create new transaction for NAP format (legacy)
+                    await prismaTx.transaction.create({
+                        data: {
+                            userId: userId!,
+                            amount: depositAmount,
+                            type: 'DEPOSIT',
+                            status: 'SUCCESS',
+                            referenceCode: webhookRefCode,
+                        }
+                    });
+                }
+
+                // D. Credit User Balance
                 const oldBalance = Number(user.balance);
                 const newBalance = oldBalance + depositAmount;
 
                 await prismaTx.user.update({
-                    where: { id: userId },
+                    where: { id: userId! },
                     data: { balance: { increment: depositAmount } }
                 });
 
-                // C. Log Transaction
-                await prismaTx.transaction.create({
-                    data: {
-                        userId,
-                        amount: depositAmount,
-                        type: 'DEPOSIT',
-                        status: 'SUCCESS',
-                        referenceCode,
-                    }
-                });
-
-                // D. Log Balance Audit
+                // E. Log Balance Audit
                 await logBalanceChange(
                     prismaTx,
-                    userId,
+                    userId!,
                     depositAmount,
                     'CREDIT',
                     'DEPOSIT',
                     oldBalance,
                     newBalance,
-                    referenceCode,
+                    webhookRefCode,
                     `Auto Deposit from Bank (${content})`
                 );
 
-                // Refund Notification if Buyer
+                // F. Send Telegram notification if available
                 if (user.telegramId) {
-                    sendTelegramMessage(user.telegramId, `✅ **Deposit Successful!**\n\nAmount: +${depositAmount.toLocaleString()} đ\nNew Balance: ${newBalance.toLocaleString()} đ`);
+                    sendTelegramMessage(user.telegramId, `✅ **Nạp tiền thành công!**\n\nSố tiền: +${depositAmount.toLocaleString()} đ\nSố dư mới: ${newBalance.toLocaleString()} đ`);
                 }
             });
         }
