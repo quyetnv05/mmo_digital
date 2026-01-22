@@ -1,86 +1,68 @@
-
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import crypto from 'crypto';
 import { logBalanceChange } from '@/lib/finance/audit';
 import { sendTelegramMessage } from '@/lib/notification/telegram';
 
-const CASSO_SECRET = process.env.PAYMENT_WEBHOOK_SECRET || 'secret_key'; // Use env var in prod
-
-// HMAC Verification Helper
-function verifySignature(body: string, signature: string) {
-    if (!signature) return false;
-    const computed = crypto.createHmac('sha256', CASSO_SECRET).update(body).digest('hex');
-    return computed === signature;
-}
+// Lấy Key bảo mật từ Env. Vercel phải có biến SEPAY_API_KEY
+const SEPAY_API_KEY = process.env.SEPAY_API_KEY || 'MMO_Digital_2402_@!';
 
 export async function POST(req: Request) {
     try {
-        const bodyText = await req.text();
-        const signature = req.headers.get('x-webhook-signature') || ''; // Adjust header name as per provider
+        // 1. Kiểm tra xác thực từ SePay (Header Authorization)
+        const authHeader = req.headers.get('Authorization');
 
-        // 1. Verify Signature (Skip in dev if secret not set, but recommended)
-        // Note: For Casso/SePay, check their specific doc. Implementing generic HMAC here.
-        // if (!verifySignature(bodyText, signature)) {
-        //     return NextResponse.json({ success: false, error: 'Invalid Signature' }, { status: 403 });
-        // }
+        // SePay gửi Key dưới dạng: "Apikey MMO_Digital_2402_@!"
+        if (!authHeader || authHeader !== `Apikey ${SEPAY_API_KEY}`) {
+            console.error('Lỗi xác thực: Key không khớp');
+            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        }
 
-        const data = JSON.parse(bodyText);
-        // Assuming payload structure: { id, content, amount, description, ... }
-        // Adjust based on actual provider (e.g. Casso gives: { data: [ { id, content, amount ... } ] })
+        const data = await req.json();
 
-        // Let's handle generic array or single object
-        const transactions = Array.isArray(data.data) ? data.data : [data];
+        // 2. SePay gửi dữ liệu đơn lẻ hoặc mảng, ta đưa về mảng để xử lý
+        const transactions = Array.isArray(data) ? data : [data];
 
         for (const tx of transactions) {
             const { id, content, amount } = tx;
-            const webhookRefCode = String(id); // Casso Transaction ID for idempotency
+            const webhookRefCode = String(id); // ID giao dịch của SePay để chống nạp trùng
 
-            // 2. Idempotency Check - prevent duplicate processing
+            // 3. Chống nạp trùng (Idempotency)
             const existing = await prisma.processedPayment.findUnique({
                 where: { referenceCode: webhookRefCode }
             });
-            if (existing) continue; // Already processed
+            if (existing) continue;
 
             const depositAmount = parseFloat(amount);
-
-            // 3. Try to match reference code formats
-            // Format 1 (New): "MMO123456" - Look up existing pending transaction
-            // Format 2 (Legacy): "NAP 123" - Use user ID directly
-
             let userId: number | null = null;
             let pendingTransaction: any = null;
 
-            // Check for MMO format first
+            // 4. Tìm mã MMOxxxxxx trong nội dung chuyển khoản
+            // Dùng Regex để bắt mã MMO kể cả khi nó nằm giữa chuỗi dài
             const mmoMatch = content.match(/MMO\s*(\d{6})/i);
+
             if (mmoMatch) {
                 const mmoCode = `MMO${mmoMatch[1]}`;
-                // Find the pending transaction by referenceCode
+                // Tìm lệnh nạp PENDING trong DB khớp với mã MMO
                 pendingTransaction = await prisma.transaction.findUnique({
                     where: { referenceCode: mmoCode }
                 });
+
                 if (pendingTransaction && pendingTransaction.status === 'PENDING') {
                     userId = pendingTransaction.userId;
                 }
             }
 
-            // Fallback to NAP format (legacy)
             if (!userId) {
-                const napMatch = content.match(/NAP\s*(\d+)/i);
-                if (napMatch) {
-                    userId = parseInt(napMatch[1]);
-                }
+                console.log(`Không tìm thấy mã MMO hợp lệ trong nội dung: ${content}`);
+                continue;
             }
 
-            if (!userId) continue; // No valid format found
-
-            // 4. Atomic Processing with Prisma Transaction
+            // 5. Xử lý cộng tiền an toàn bằng Transaction
             await prisma.$transaction(async (prismaTx) => {
-                // Verify User exists
                 const user = await prismaTx.user.findUnique({ where: { id: userId! } });
-                if (!user) return; // User not found
+                if (!user) return;
 
-                // A. Create ProcessedPayment (Lock Idempotency)
+                // A. Đánh dấu giao dịch đã xử lý
                 await prismaTx.processedPayment.create({
                     data: {
                         referenceCode: webhookRefCode,
@@ -89,26 +71,13 @@ export async function POST(req: Request) {
                     }
                 });
 
-                // B. If there's a pending transaction from MMO format, update it
-                if (pendingTransaction) {
-                    await prismaTx.transaction.update({
-                        where: { id: pendingTransaction.id },
-                        data: { status: 'SUCCESS' }
-                    });
-                } else {
-                    // C. Create new transaction for NAP format (legacy)
-                    await prismaTx.transaction.create({
-                        data: {
-                            userId: userId!,
-                            amount: depositAmount,
-                            type: 'DEPOSIT',
-                            status: 'SUCCESS',
-                            referenceCode: webhookRefCode,
-                        }
-                    });
-                }
+                // B. Cập nhật trạng thái lệnh nạp thành SUCCESS
+                await prismaTx.transaction.update({
+                    where: { id: pendingTransaction.id },
+                    data: { status: 'SUCCESS' }
+                });
 
-                // D. Credit User Balance
+                // C. Cộng số dư User
                 const oldBalance = Number(user.balance);
                 const newBalance = oldBalance + depositAmount;
 
@@ -117,7 +86,7 @@ export async function POST(req: Request) {
                     data: { balance: { increment: depositAmount } }
                 });
 
-                // E. Log Balance Audit
+                // D. Ghi log biến động số dư
                 await logBalanceChange(
                     prismaTx,
                     userId!,
@@ -127,12 +96,12 @@ export async function POST(req: Request) {
                     oldBalance,
                     newBalance,
                     webhookRefCode,
-                    `Auto Deposit from Bank (${content})`
+                    `Nạp tiền tự động SePay (${content})`
                 );
 
-                // F. Send Telegram notification if available
+                // E. Thông báo Telegram (nếu có)
                 if (user.telegramId) {
-                    sendTelegramMessage(user.telegramId, `✅ **Nạp tiền thành công!**\n\nSố tiền: +${depositAmount.toLocaleString()} đ\nSố dư mới: ${newBalance.toLocaleString()} đ`);
+                    await sendTelegramMessage(user.telegramId, `✅ **Nạp tiền thành công!**\n\n💰 Số tiền: +${depositAmount.toLocaleString()}đ\n💳 Nội dung: ${content}\n📈 Số dư mới: ${newBalance.toLocaleString()}đ`);
                 }
             });
         }
@@ -143,4 +112,9 @@ export async function POST(req: Request) {
         console.error('Webhook error:', error);
         return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
     }
+}
+
+// Thêm phương thức GET để SePay kiểm tra trạng thái Webhook
+export async function GET() {
+    return NextResponse.json({ success: true, message: "SePay Webhook is active" });
 }
