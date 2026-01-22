@@ -1,119 +1,76 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-const SEPAY_API_KEY = process.env.SEPAY_API_KEY || '';
-
-/**
- * SePay Webhook Handler
- * 
- * Receives deposit notifications from SePay and automatically credits user balance.
- * 
- * Expected SePay payload structure:
- * {
- *   id: number,
- *   gateway: string,
- *   transactionDate: string,
- *   accountNumber: string,
- *   subAccount: string | null,
- *   transferType: "in" | "out",
- *   transferAmount: number,
- *   accumulated: number,
- *   code: string | null,
- *   content: string,
- *   referenceCode: string,
- *   description: string
- * }
- */
+// Đảm bảo lấy đúng Key từ Vercel Env
+const SEPAY_API_KEY = process.env.SEPAY_API_KEY || 'MMO_Digital_2402_@!';
 
 export async function POST(req: NextRequest) {
     try {
-        // 1. Validate API Key
-        // SePay sends: "Authorization": "Apikey YOUR_API_KEY"
+        // 1. Xác thực Header Authorization chuẩn SePay
         const authHeader = req.headers.get('Authorization') || '';
-        const apiKey = req.headers.get('x-api-key') ||
-            authHeader.replace('Apikey ', '').replace('Bearer ', '').trim();
+        const apiKey = authHeader.replace('Apikey ', '').trim();
 
         if (!SEPAY_API_KEY || apiKey !== SEPAY_API_KEY) {
-            console.error('[SePay Webhook] Invalid API Key. Received:', apiKey, 'Expected:', SEPAY_API_KEY);
+            console.error('[SePay Webhook] Unauthorized:', apiKey);
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
 
-        // 2. Parse request body
         const body = await req.json();
-        console.log('[SePay Webhook] Received:', JSON.stringify(body, null, 2));
-
-        // Handle both single object and array format
         const transactions = Array.isArray(body) ? body : [body];
 
         for (const tx of transactions) {
-            // 3. Extract transaction data
-            const { content, transferAmount, transferType, id: sepayTransactionId } = tx;
+            // SePay dùng transferAmount và transferType
+            const { content, transferAmount, transferType, id: sepayId } = tx;
 
-            // Only process incoming transfers
-            if (transferType !== 'in') {
-                console.log('[SePay Webhook] Skipping outgoing transfer');
-                continue;
-            }
+            if (transferType !== 'in') continue;
 
             const amount = parseFloat(transferAmount) || 0;
-            if (amount <= 0) {
-                console.log('[SePay Webhook] Invalid amount:', amount);
-                continue;
-            }
+            if (amount <= 0) continue;
 
-            // 4. Extract MMO reference code from content (e.g., "MMO123456")
-            const mmoMatch = content?.match(/MMO\s*(\d{6})/i);
+            // 2. Tìm mã MMOxxxxxx trong chuỗi nội dung phức tạp
+            // Regex này sẽ tìm MMO đi kèm với đúng 6 chữ số
+            const mmoMatch = content?.match(/MMO(\d{6})/i);
             if (!mmoMatch) {
-                console.log('[SePay Webhook] No MMO code found in content:', content);
+                console.log('[SePay Webhook] No MMO code found in:', content);
                 continue;
             }
 
             const referenceCode = `MMO${mmoMatch[1]}`;
-            console.log('[SePay Webhook] Found referenceCode:', referenceCode);
 
-            // 5. Find pending transaction by referenceCode
+            // 3. Tìm giao dịch PENDING
             const pendingTx = await prisma.transaction.findUnique({
                 where: { referenceCode }
             });
 
-            if (!pendingTx) {
-                console.log('[SePay Webhook] No transaction found for code:', referenceCode);
+            if (!pendingTx || pendingTx.status !== 'PENDING') {
+                console.log('[SePay Webhook] Skip (Not found or Processed):', referenceCode);
                 continue;
             }
 
-            // 6. Anti-duplicate check - Skip if already SUCCESS
-            if (pendingTx.status === 'SUCCESS') {
-                console.log('[SePay Webhook] Transaction already processed:', referenceCode);
-                continue;
-            }
-
-            // 7. Atomic transaction processing
+            // 4. Xử lý nguyên tử (Atomic Transaction)
             await prisma.$transaction(async (prismaTx) => {
-                // A. Update transaction status to SUCCESS
-                await prismaTx.transaction.update({
-                    where: { id: pendingTx.id },
-                    data: { status: 'SUCCESS' }
-                });
-
-                // B. Get user and calculate new balance
+                // Kiểm tra User
                 const user = await prismaTx.user.findUnique({
                     where: { id: pendingTx.userId }
                 });
 
-                if (!user) {
-                    throw new Error(`User not found: ${pendingTx.userId}`);
-                }
+                if (!user) throw new Error("User not found");
 
                 const oldBalance = Number(user.balance);
                 const newBalance = oldBalance + amount;
 
-                // C. Update user balance
+                // Cập nhật số dư và trạng thái lệnh nạp
                 await prismaTx.user.update({
                     where: { id: user.id },
                     data: { balance: { increment: amount } }
                 });
 
-                // D. Create BalanceAudit log
+                await prismaTx.transaction.update({
+                    where: { id: pendingTx.id },
+                    data: { status: 'SUCCESS' }
+                });
+
+                // Ghi log biến động số dư (BalanceAudit)
                 await prismaTx.balanceAudit.create({
                     data: {
                         userId: user.id,
@@ -122,32 +79,22 @@ export async function POST(req: NextRequest) {
                         oldBalance: oldBalance,
                         newBalance: newBalance,
                         reason: 'DEPOSIT',
-                        referenceId: String(sepayTransactionId || referenceCode),
-                        description: `Nạp tiền tự động qua SePay - ${referenceCode}`
+                        referenceId: String(sepayId),
+                        description: `Nạp tiền tự động SePay - ${content}`
                     }
                 });
-
-                console.log(`[SePay Webhook] SUCCESS: User ${user.id} credited ${amount}đ. Balance: ${oldBalance} -> ${newBalance}`);
             });
         }
 
-        // 8. Return success to SePay
         return NextResponse.json({ success: true, message: 'Processed' });
 
-    } catch (error) {
-        console.error('[SePay Webhook] Error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Internal Server Error' },
-            { status: 500 }
-        );
+    } catch (error: any) {
+        console.error('[SePay Webhook] Error:', error.message);
+        // Trả về 200 để SePay không bắn lại khi có lỗi code (tránh treo database)
+        return NextResponse.json({ success: false, error: error.message }, { status: 200 });
     }
 }
 
-// Health check endpoint
 export async function GET() {
-    return NextResponse.json({
-        success: true,
-        message: 'SePay Webhook is active',
-        timestamp: new Date().toISOString()
-    });
+    return NextResponse.json({ success: true, message: 'SePay Webhook Active' });
 }
