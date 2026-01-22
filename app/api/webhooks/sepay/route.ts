@@ -28,10 +28,13 @@ const SEPAY_API_KEY = process.env.SEPAY_API_KEY || '';
 export async function POST(req: NextRequest) {
     try {
         // 1. Validate API Key
-        const apiKey = req.headers.get('x-api-key') || req.headers.get('Authorization')?.replace('Bearer ', '');
+        // SePay sends: "Authorization": "Apikey YOUR_API_KEY"
+        const authHeader = req.headers.get('Authorization') || '';
+        const apiKey = req.headers.get('x-api-key') ||
+            authHeader.replace('Apikey ', '').replace('Bearer ', '').trim();
 
         if (!SEPAY_API_KEY || apiKey !== SEPAY_API_KEY) {
-            console.error('[SePay Webhook] Invalid API Key');
+            console.error('[SePay Webhook] Invalid API Key. Received:', apiKey, 'Expected:', SEPAY_API_KEY);
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
 
