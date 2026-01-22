@@ -1,56 +1,61 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verify } from 'jsonwebtoken';
+import { jwtVerify } from 'jose';
 
-// This function can be marked `async` if using `await` inside
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
     const path = request.nextUrl.pathname;
+    const ip = request.headers.get('x-forwarded-for') || 'unknown';
 
-    // Define public paths that don't need authentication
+    // Define public paths
     const isPublicPath =
         path === '/' ||
         path.startsWith('/auth') ||
-        path.startsWith('/api/auth') ||
+        path.startsWith('/api/auth') || // Allow all auth APIs
         path.startsWith('/_next') ||
         path.startsWith('/static') ||
         path.includes('favicon.ico');
 
-    // Get the token from the cookies
-    const token = request.cookies.get('token')?.value || '';
+    // Get token from cookie (HttpOnly)
+    const token = request.cookies.get('auth_token')?.value;
 
-    // If the path is public and user has token, redirect to dashboard
-    if (isPublicPath && token && path.startsWith('/auth')) {
+    // 1. Redirect to Dashboard if logged in and trying to access Auth pages
+    if (path.startsWith('/auth') && token) {
         return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 
-    // If the path is protected and user has no token, redirect to login
+    // 2. Redirect to Login if accessing protected routes without token
     if (!isPublicPath && !token) {
-        // For development/demo purposes, we might want to bypass this or have a mock token
-        // But for production logic:
-        // return NextResponse.redirect(new URL('/auth/login', request.url));
-
-        // TEMPORARY: Allow access for demo without real JWT
-        // In a real app, uncomment the redirection above
+        return NextResponse.redirect(new URL('/auth/login', request.url));
     }
 
-    // Admin route protection
-    if (path.startsWith('/dashboard/admin')) {
-        // Decode token and check role...
-        // const user = decode(token);
-        // if (user.role !== 'ADMIN') return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
+    // 3. Verify Token & Check Roles for Protected Routes
+    if (token) {
+        try {
+            const secret = new TextEncoder().encode(process.env.JWT_SECRET || 'secret');
+            const { payload } = await jwtVerify(token, secret);
+            const userRole = payload.role as string;
 
-    if (path.startsWith('/dashboard') && !path.startsWith('/dashboard/admin') && token) {
-        // We do this non-blocking
-        const ip = request.headers.get('x-forwarded-for') || (request as any).ip || 'unknown';
-        const userAgent = request.headers.get('user-agent') || 'unknown';
+            // ADMIN Routes Protection
+            if (path.startsWith('/dashboard/admin')) {
+                if (userRole !== 'ADMIN') {
+                    // Log attempt?
+                    return NextResponse.redirect(new URL('/dashboard', request.url)); // Access Denied -> Back to User Dashboard
+                }
+            }
 
-        // Call internal API
-        fetch(new URL('/api/security/log-access', request.url), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ip, userAgent, path }),
-        }).catch(() => { }); // Ignore errors
+            // SELLER Routes Protection (Inventory, Products)
+            if (path.startsWith('/dashboard/inventory') || path.startsWith('/dashboard/products')) {
+                if (userRole !== 'SELLER' && userRole !== 'ADMIN') {
+                    return NextResponse.redirect(new URL('/dashboard', request.url));
+                }
+            }
+
+        } catch (error) {
+            // Token invalid or expired
+            const response = NextResponse.redirect(new URL('/auth/login', request.url));
+            response.cookies.delete('auth_token'); // Clear invalid cookie
+            return response;
+        }
     }
 
     return NextResponse.next();
@@ -59,8 +64,12 @@ export function middleware(request: NextRequest) {
 // Matching paths
 export const config = {
     matcher: [
-        '/',
         '/dashboard/:path*',
         '/auth/:path*',
+        // We generally don't want to match API routes to avoid blocking public APIs unless specific pattern
+        // But here we might want to protect /apiRoutes too? 
+        // Better to handle API auth inside Route Handlers for granular control.
+        // So exclude /api from matcher or handle it carefully.
+        // For now, only matching pages.
     ],
 };

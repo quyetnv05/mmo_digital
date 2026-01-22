@@ -1,129 +1,41 @@
 'use client';
 
 import Link from 'next/link';
-import { ShoppingCart, Package, Shield, Zap, Star, ChevronRight, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Package, Shield, Zap, Star, ChevronRight, Loader2, CheckCircle, AlertCircle, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import useSWR from 'swr';
 
-interface Product {
-    id: number;
-    name: string;
-    price: number;
-    stock: number;
-    category: string;
-    warrantyHours: number;
-}
+function AuthButtons() {
+    const fetcher = (url: string) => fetch(url).then(res => res.json());
+    const { data, isLoading } = useSWR('/api/auth/me', fetcher);
+    // data structure based on auth/me api: { success: true, user: {...} }
 
-// Product Card Component with Buy Logic
-function ProductCard({ product }: { product: Product }) {
-    const router = useRouter();
-    const [isBuying, setIsBuying] = useState(false);
+    if (isLoading) return <div className="w-24 h-8 bg-slate-800 animate-pulse rounded-lg"></div>;
 
-    const formatVND = (amount: number) => {
-        return new Intl.NumberFormat('vi-VN').format(amount);
-    };
-
-    const handleBuy = async (e: React.MouseEvent) => {
-        e.preventDefault(); // Prevent navigation
-        if (product.stock <= 0) return;
-
-        if (!window.confirm(`Xác nhận mua 1 ${product.name} với giá ${formatVND(product.price)}đ?`)) return;
-
-        setIsBuying(true);
-        try {
-            const res = await fetch('/api/orders/create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ productId: product.id, quantity: 1 }),
-            });
-            const data = await res.json();
-
-            if (data.success) {
-                alert('Mua hàng thành công!');
-                router.push('/dashboard/orders');
-            } else {
-                alert('Mua thất bại: ' + (data.error || 'Lỗi không xác định'));
-                if (data.error === 'Unauthorized') router.push('/auth/login');
-            }
-        } catch (error) {
-            alert('Lỗi kết nối');
-        } finally {
-            setIsBuying(false);
-        }
-    };
+    if (data?.success && data?.user) {
+        return (
+            <Link href="/dashboard" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-all flex items-center gap-2 border border-slate-700">
+                <User size={18} className="text-blue-400" />
+                <span>Dashboard ({new Intl.NumberFormat('vi-VN').format(data.user.balance)}đ)</span>
+            </Link>
+        );
+    }
 
     return (
-        <Link
-            href={`/products/${product.id}`}
-            className="group relative overflow-hidden rounded-xl bg-slate-800/50 border border-slate-700/50 hover:border-blue-500/50 transition-all duration-300"
-        >
-            {/* Gradient overlay on hover */}
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-            {/* Content */}
-            <div className="relative p-5">
-                {/* Category Badge */}
-                <div className="flex items-center justify-between mb-3">
-                    <span className="px-2 py-1 text-xs font-medium text-blue-400 bg-blue-500/10 border border-blue-500/30 rounded-full">
-                        {product.category}
-                    </span>
-                    <div className="flex items-center gap-1 text-amber-400">
-                        <Star size={14} className="fill-amber-400" />
-                        <span className="text-xs font-medium">4.9</span>
-                    </div>
-                </div>
-
-                {/* Product Name */}
-                <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-blue-400 transition-colors line-clamp-2">
-                    {product.name}
-                </h3>
-
-                {/* Features */}
-                <div className="flex items-center gap-3 text-xs text-slate-400 mb-4">
-                    <div className="flex items-center gap-1">
-                        <Shield size={12} className="text-green-400" />
-                        <span>Bảo hành {product.warrantyHours}h</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                        <Zap size={12} className="text-amber-400" />
-                        <span>Giao ngay</span>
-                    </div>
-                </div>
-
-                {/* Price & Stock */}
-                <div className="flex items-end justify-between">
-                    <div>
-                        <p className="text-xs text-slate-500 mb-1">Giá mỗi tài khoản</p>
-                        <p className="text-xl font-bold text-white">
-                            {formatVND(product.price)}
-                            <span className="text-sm text-slate-400 font-normal">đ</span>
-                        </p>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-xs text-slate-500 mb-1">Tồn kho</p>
-                        <p className={`text-lg font-semibold ${product.stock > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {product.stock > 0 ? product.stock : 'Hết hàng'}
-                        </p>
-                    </div>
-                </div>
-
-                {/* Buy Button */}
-                <button
-                    onClick={handleBuy}
-                    disabled={product.stock <= 0 || isBuying}
-                    className={`mt-4 w-full py-2.5 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-all duration-200
-            ${product.stock > 0
-                            ? 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white'
-                            : 'bg-slate-700 text-slate-400 cursor-not-allowed'
-                        }`}
-                >
-                    {isBuying ? <Loader2 size={18} className="animate-spin" /> : <ShoppingCart size={18} />}
-                    {product.stock > 0 ? (isBuying ? 'Đang xử lý...' : 'Mua ngay') : 'Hết hàng'}
-                </button>
-            </div>
-        </Link>
+        <>
+            <Link href="/auth/login" className="text-slate-400 hover:text-white transition-colors">
+                Đăng nhập
+            </Link>
+            <Link href="/auth/register" className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-lg hover:from-blue-500 hover:to-purple-500 transition-all">
+                Đăng ký
+            </Link>
+        </>
     );
 }
+
+// ProductCard is now imported from @/components/ProductCard
+import ProductCard, { Product } from '@/components/ProductCard';
 
 // Hero Section & Categories (Unchanged)
 function HeroSection() {
@@ -167,13 +79,23 @@ function FilterSection({
     inStockOnly,
     setInStockOnly
 }: any) {
-    const categories = [
-        { id: 0, name: 'Tất cả', icon: Package },
-        { id: 1, name: 'Facebook', icon: Package },
-        { id: 2, name: 'Gmail', icon: Package },
-        { id: 3, name: 'Tiktok', icon: Package },
-        { id: 4, name: 'Instagram', icon: Package },
-    ];
+    const [categories, setCategories] = useState<{ id: number, name: string }[]>([
+        { id: 0, name: 'Tất cả' }
+    ]);
+
+    useEffect(() => {
+        fetch('/api/categories')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    setCategories([
+                        { id: 0, name: 'Tất cả' },
+                        ...data.data
+                    ]);
+                }
+            })
+            .catch(err => console.error('Failed to load categories', err));
+    }, []);
 
     return (
         <div className="mb-8 space-y-4">
@@ -187,20 +109,20 @@ function FilterSection({
                     className="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 transition-colors"
                 />
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     <input
                         type="number"
                         placeholder="Min Price"
                         value={minPrice}
                         onChange={(e) => setMinPrice(e.target.value)}
-                        className="w-28 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
+                        className="w-24 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
                     />
                     <input
                         type="number"
                         placeholder="Max Price"
                         value={maxPrice}
                         onChange={(e) => setMaxPrice(e.target.value)}
-                        className="w-28 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
+                        className="w-24 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
                     />
                     <select
                         value={sort}
@@ -224,14 +146,14 @@ function FilterSection({
             </div>
 
             {/* Category Tags */}
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            <div className="flex flex-wrap gap-2">
                 {categories.map((cat) => (
                     <button
                         key={cat.id}
                         onClick={() => setActiveCategory(cat.id)}
                         className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition-all
                             ${activeCategory === cat.id
-                                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
+                                ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg shadow-blue-500/25'
                                 : 'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700/50 border border-slate-700/50'
                             }`}
                     >
@@ -297,12 +219,7 @@ export default function HomePage() {
                         </Link>
 
                         <div className="flex items-center gap-4">
-                            <Link href="/auth/login" className="text-slate-400 hover:text-white transition-colors">
-                                Đăng nhập
-                            </Link>
-                            <Link href="/auth/register" className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-lg hover:from-blue-500 hover:to-purple-500 transition-all">
-                                Đăng ký
-                            </Link>
+                            <AuthButtons />
                         </div>
                     </div>
                 </div>

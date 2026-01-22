@@ -91,6 +91,38 @@ async function main() {
         },
     });
 
+    // Create Categories based on User Screenshot
+    const categories = [
+        // SẢN PHẨM
+        { name: 'Tài khoản', slug: 'tai-khoan' },
+        { name: 'Email', slug: 'email-accounts' }, // Avoid duplicate slug if 'email' exists
+        { name: 'Clone', slug: 'clone' },
+        { name: 'Tools', slug: 'tools' },
+        { name: 'Proxy & VPN', slug: 'proxy-vpn' },
+        { name: 'Phần mềm', slug: 'software-product' },
+
+        // DỊCH VỤ
+        { name: 'Nâng cấp tài khoản', slug: 'nang-cap-tai-khoan' },
+        { name: 'Dịch vụ phần mềm', slug: 'dich-vu-phan-mem' },
+        { name: 'Tool/Script Auto', slug: 'tool-script-auto' },
+        { name: 'VPS', slug: 'vps' },
+        { name: 'Tăng tương tác', slug: 'tang-tuong-tac' },
+        { name: 'Seo', slug: 'seo' },
+        { name: 'Marketing', slug: 'marketing' },
+        { name: 'Blockchain', slug: 'blockchain' },
+
+        { name: 'Khác', slug: 'other-general' },
+    ];
+
+    for (const cat of categories) {
+        await prisma.category.upsert({
+            where: { slug: cat.slug },
+            update: { name: cat.name },
+            create: cat,
+        });
+    }
+    console.log('Detailed Categories created/updated.');
+
     console.log('Seeding finished.');
     console.log('Admin user created/updated:', admin.username);
     console.log('Password: admin123');

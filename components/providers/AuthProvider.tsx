@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // I will stick to the plan: Modify Login mechanism slightly if needed, or just set cookie via js-cookie here for now to make it work quickly with middleware.
 
         // For now, let's simulate setting cookie if the server didn't (though server SHOULD).
-        document.cookie = `token=${token}; path=/; max-age=86400; SameSite=Lax`; // simple cookie set
+        document.cookie = `auth_token=${token}; path=/; max-age=604800; SameSite=Lax`; // simple cookie set
         setUser(userData);
         mutate(); // Refresh SWR
         router.push('/dashboard');
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.error('Logout API call failed', e);
         }
         // Clear cookie
-        document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+        document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
         setUser(null);
         mutate(null, false); // Clear SWR cache
         router.push('/auth/login');

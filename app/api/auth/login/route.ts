@@ -6,7 +6,7 @@ import { createActivityLog } from '@/lib/security/tracking';
 import { z } from 'zod';
 
 const loginSchema = z.object({
-    email: z.string().email(),
+    identifier: z.string().min(3),
     password: z.string(),
 });
 
@@ -26,11 +26,16 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        const { email, password } = validation.data;
+        const { identifier, password } = validation.data;
 
-        // Find user
-        const user = await prisma.user.findUnique({
-            where: { email },
+        // Find user by email or username
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: identifier },
+                    { username: identifier }
+                ]
+            },
         });
 
         if (!user) {
@@ -81,7 +86,7 @@ export async function POST(req: NextRequest) {
         // Log successful login
         await createActivityLog(req, user.id, 'LOGIN', { status: 'SUCCESS' });
 
-        return NextResponse.json({
+        const response = NextResponse.json({
             success: true,
             message: 'Login successful',
             token,
@@ -94,6 +99,17 @@ export async function POST(req: NextRequest) {
                 pendingBalance: Number(user.pendingBalance),
             },
         });
+
+        // Set HttpOnly Cookie
+        response.cookies.set('auth_token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: 7 * 24 * 60 * 60, // 7 days
+        });
+
+        return response;
     } catch (error) {
         console.error('Login error:', error);
         return NextResponse.json(

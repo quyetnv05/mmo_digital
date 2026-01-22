@@ -9,7 +9,7 @@ import { prisma } from '@/lib/prisma';
  */
 export async function GET(req: NextRequest) {
     try {
-        const token = req.cookies.get('token')?.value;
+        const token = req.cookies.get('auth_token')?.value;
 
         if (!token) {
             return NextResponse.json(

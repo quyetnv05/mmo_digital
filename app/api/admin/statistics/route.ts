@@ -44,33 +44,51 @@ export async function GET(req: Request) {
             where: { status: 'PENDING' }
         });
 
-        // Net Profit (Platform Fees) - Estimated from BalanceAudit with ORDER_ESCROW
-        // Fee is typically 5-10% of order total. We calculate from difference between order total and seller net.
-        const feeAudits = await prisma.balanceAudit.findMany({
-            where: {
-                reason: 'ORDER_ESCROW',
-                createdAt: { gte: startDate }
-            },
-            select: { amount: true, description: true }
-        });
-
-        // Parse fee percentage from description and calculate total fees
-        let netProfit = 0;
-        feeAudits.forEach(audit => {
-            const feeMatch = audit.description?.match(/Fee: (\d+(?:\.\d+)?)%/);
-            if (feeMatch) {
-                const feeRate = parseFloat(feeMatch[1]) / 100;
-                const netAmount = Number(audit.amount);
-                // Net = Total * (1 - feeRate), so Total = Net / (1 - feeRate), Fee = Total - Net
-                const totalAmount = netAmount / (1 - feeRate);
-                netProfit += totalAmount - netAmount;
-            }
-        });
+        // Net Profit (Platform Fees) - Fixed 5% of Total Revenue
+        const PLATFORM_FEE_PERCENTAGE = 0.05;
+        const netProfit = (Number(totalRevenue._sum.totalPrice || 0)) * PLATFORM_FEE_PERCENTAGE;
 
         // Total User Balance (Platform-wide)
         const totalUserBalance = await prisma.user.aggregate({
             _sum: { balance: true, pendingBalance: true }
         });
+
+        // 4. Disputes Management
+        const disputeStats = await prisma.dispute.groupBy({
+            by: ['status'],
+            _count: true
+        });
+
+        const pendingDisputesCount = disputeStats.find(d => d.status === 'OPEN')?._count || 0;
+        const resolvedDisputesCount = disputeStats.filter(d => d.status !== 'OPEN').reduce((acc, curr) => acc + curr._count, 0);
+
+        // Fetch Recent Disputes
+        const recentDisputes = await prisma.dispute.findMany({
+            take: 5,
+            orderBy: { createdAt: 'desc' },
+            include: {
+                user: { select: { username: true } }, // Buyer
+                order: {
+                    include: {
+                        product: {
+                            include: {
+                                seller: { select: { username: true } }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        const formattedDisputes = recentDisputes.map(d => ({
+            id: d.id,
+            buyerName: d.user.username,
+            sellerName: d.order.product.seller.username,
+            orderId: d.orderId,
+            reason: d.reason,
+            status: d.status,
+            createdAt: d.createdAt
+        }));
 
         // Dispute Rate
         const totalOrdersAll = await prisma.order.count({
@@ -158,7 +176,9 @@ export async function GET(req: Request) {
                     disputeRate: Math.round(disputeRate * 100) / 100
                 },
                 chartData,
-                lowStockProducts
+                lowStockProducts,
+                recentDisputes: formattedDisputes,
+                pendingDisputesCount
             }
         });
 

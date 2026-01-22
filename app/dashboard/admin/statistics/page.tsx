@@ -205,6 +205,56 @@ export default function StatisticsPage() {
                 </div>
             </div>
 
+            {/* Disputes Section */}
+            <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
+                <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <AlertTriangle size={20} className="text-red-400" />
+                    Khiếu nại mới nhất
+                    {data?.data?.pendingDisputesCount > 0 && (
+                        <span className="ml-2 px-2 py-0.5 bg-red-500/20 text-red-400 text-xs rounded-full">
+                            {data.data.pendingDisputesCount} cần xử lý
+                        </span>
+                    )}
+                </h2>
+                <div className="overflow-x-auto">
+                    <table className="w-full">
+                        <thead>
+                            <tr className="border-b border-slate-700">
+                                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Mã đơn</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Buyer</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Seller</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Lý do</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-700">
+                            {data?.data?.recentDisputes?.map((dispute: any) => (
+                                <tr key={dispute.id} className="hover:bg-slate-700/30">
+                                    <td className="px-4 py-3 text-sm text-slate-400">#{dispute.orderId}</td>
+                                    <td className="px-4 py-3 text-sm text-white">{dispute.buyerName}</td>
+                                    <td className="px-4 py-3 text-sm text-white">{dispute.sellerName}</td>
+                                    <td className="px-4 py-3 text-sm text-white">{dispute.reason}</td>
+                                    <td className="px-4 py-3">
+                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${dispute.status === 'OPEN' ? 'bg-yellow-500/20 text-yellow-400' :
+                                                dispute.status === 'RESOLVED' ? 'bg-green-500/20 text-green-400' : 'bg-slate-500/20 text-slate-400'
+                                            }`}>
+                                            {dispute.status === 'OPEN' ? 'Cần xử lý' : dispute.status}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                            {(!data?.data?.recentDisputes || data.data.recentDisputes.length === 0) && (
+                                <tr>
+                                    <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                                        Không có khiếu nại nào gần đây
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             {/* Low Stock Alert */}
             {lowStockProducts.length > 0 && (
                 <div className="bg-slate-800 border border-slate-700 rounded-xl p-6">
@@ -233,8 +283,8 @@ export default function StatisticsPage() {
                                         <td className="px-4 py-3 text-sm text-white">{formatVND(product.price)} đ</td>
                                         <td className="px-4 py-3">
                                             <span className={`px-2 py-1 text-xs font-medium rounded-full ${product.stock === 0
-                                                    ? 'bg-red-500/20 text-red-400'
-                                                    : 'bg-amber-500/20 text-amber-400'
+                                                ? 'bg-red-500/20 text-red-400'
+                                                : 'bg-amber-500/20 text-amber-400'
                                                 }`}>
                                                 {product.stock === 0 ? 'Hết hàng' : `Còn ${product.stock}`}
                                             </span>

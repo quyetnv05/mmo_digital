@@ -1,37 +1,74 @@
-'use client';
-
-import { useState } from 'react';
-import { Package, Plus, Edit, Trash2, Eye, MoreVertical } from 'lucide-react';
+import { Package, Plus, Edit, Trash2, Eye } from 'lucide-react';
 import Link from 'next/link';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { prisma } from '@/lib/prisma';
+import jwt from 'jsonwebtoken';
 
-interface Product {
-    id: number;
-    name: string;
-    description: string;
-    price: number;
-    warrantyHours: number;
-    status: 'active' | 'inactive' | 'deleted';
-    stock: number;
-    sold: number;
-    category: string;
-}
+const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
-export default function ProductsPage() {
-    const [products, setProducts] = useState<Product[]>([
-        { id: 1, name: 'Clone Facebook 2FA', description: 'Tài khoản đã xác minh danh tính', price: 15000, warrantyHours: 24, status: 'active', stock: 150, sold: 1234, category: 'Facebook' },
-        { id: 2, name: 'Gmail PVA', description: 'Phone Verified Account', price: 5000, warrantyHours: 48, status: 'active', stock: 500, sold: 3456, category: 'Gmail' },
-        { id: 3, name: 'Tiktok Aged Account', description: 'Tài khoản 6 tháng tuổi', price: 20000, warrantyHours: 24, status: 'active', stock: 75, sold: 567, category: 'Tiktok' },
-        { id: 4, name: 'Instagram HQ', description: 'High Quality Profile', price: 12000, warrantyHours: 24, status: 'inactive', stock: 0, sold: 123, category: 'Instagram' },
-    ]);
+export default async function ProductsPage() {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('auth_token')?.value;
 
-    const statusConfig = {
-        active: { bg: 'bg-green-500/10', text: 'text-green-400', border: 'border-green-500/30', label: 'Đang bán' },
-        inactive: { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/30', label: 'Tạm dừng' },
-        deleted: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/30', label: 'Đã xóa' },
+    if (!token) {
+        redirect('/auth/login');
+    }
+
+    let userId: number;
+    let userRole: string;
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        userId = decoded.userId;
+        userRole = decoded.role;
+    } catch (e) {
+        redirect('/auth/login');
+    }
+
+    // Role check (Optional, Middleware handles it but good for specific page logic)
+    if (userRole !== 'SELLER' && userRole !== 'ADMIN') {
+        return (
+            <div className="text-center py-20">
+                <h2 className="text-xl font-bold text-white">Truy cập bị từ chối</h2>
+                <p className="text-slate-400">Trang này chỉ dành cho người bán.</p>
+                <Link href="/dashboard" className="text-blue-400 hover:underline mt-4 block">Quay lại Dashboard</Link>
+            </div>
+        );
+    }
+
+    // Fetch Products
+    // We fetch items' isSold status to calculate stock/sold
+    const productsRaw = await prisma.product.findMany({
+        where: { sellerId: userId },
+        include: {
+            category: true,
+            items: {
+                select: { isSold: true }
+            }
+        },
+        orderBy: { id: 'desc' }
+    });
+
+    // Process data
+    const products = productsRaw.map(p => {
+        const stock = p.items.filter(i => !i.isSold).length;
+        const sold = p.items.filter(i => i.isSold).length;
+        return {
+            ...p,
+            stock,
+            sold,
+            categoryName: p.category?.name || 'Chưa phân loại'
+        };
+    });
+
+    const formatVND = (amount: any) => {
+        return new Intl.NumberFormat('vi-VN').format(Number(amount));
     };
 
-    const formatVND = (amount: number) => {
-        return new Intl.NumberFormat('vi-VN').format(amount);
+    const statusConfig: Record<string, any> = {
+        ACTIVE: { bg: 'bg-green-500/10', text: 'text-green-400', border: 'border-green-500/30', label: 'Đang bán' },
+        HIDDEN: { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/30', label: 'Tạm dừng' },
+        DELETED: { bg: 'bg-red-500/10', text: 'text-red-400', border: 'border-red-500/30', label: 'Đã xóa' },
     };
 
     return (
@@ -54,10 +91,13 @@ export default function ProductsPage() {
                     >
                         Upload kho
                     </Link>
-                    <button className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium rounded-lg flex items-center gap-2 transition-all">
+                    <Link
+                        href="/dashboard/products/create"
+                        className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-medium rounded-lg flex items-center gap-2 transition-all"
+                    >
                         <Plus size={18} />
                         Thêm sản phẩm
-                    </button>
+                    </Link>
                 </div>
             </div>
 
@@ -69,7 +109,7 @@ export default function ProductsPage() {
                 </div>
                 <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/30">
                     <p className="text-green-400/80 text-sm">Đang bán</p>
-                    <p className="text-2xl font-bold text-green-400">{products.filter(p => p.status === 'active').length}</p>
+                    <p className="text-2xl font-bold text-green-400">{products.filter(p => p.status === 'ACTIVE').length}</p>
                 </div>
                 <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/30">
                     <p className="text-blue-400/80 text-sm">Tổng tồn kho</p>
@@ -111,50 +151,58 @@ export default function ProductsPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-700/50">
-                            {products.map((product) => (
-                                <tr key={product.id} className="hover:bg-slate-700/30 transition-colors">
-                                    <td className="px-4 py-4">
-                                        <div>
-                                            <p className="text-white font-medium">{product.name}</p>
-                                            <p className="text-slate-500 text-xs mt-0.5">{product.description}</p>
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-4">
-                                        <span className="px-2 py-1 text-xs font-medium text-blue-400 bg-blue-500/10 border border-blue-500/30 rounded-full">
-                                            {product.category}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-4 text-white font-medium">
-                                        {formatVND(product.price)}đ
-                                    </td>
-                                    <td className="px-4 py-4">
-                                        <span className={`font-medium ${product.stock > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            {product.stock}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-4 text-slate-300">
-                                        {product.sold}
-                                    </td>
-                                    <td className="px-4 py-4">
-                                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full border ${statusConfig[product.status].bg} ${statusConfig[product.status].text} ${statusConfig[product.status].border}`}>
-                                            {statusConfig[product.status].label}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-4">
-                                        <div className="flex items-center gap-1">
-                                            <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors" title="Xem">
-                                                <Eye size={16} />
-                                            </button>
-                                            <button className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors" title="Sửa">
-                                                <Edit size={16} />
-                                            </button>
-                                            <button className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Xóa">
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
+                            {products.length === 0 ? (
+                                <tr>
+                                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                                        Chưa có sản phẩm nào. Hãy tạo sản phẩm mới!
                                     </td>
                                 </tr>
-                            ))}
+                            ) : (
+                                products.map((product) => (
+                                    <tr key={product.id} className="hover:bg-slate-700/30 transition-colors">
+                                        <td className="px-4 py-4">
+                                            <div>
+                                                <p className="text-white font-medium">{product.name}</p>
+                                                <p className="text-slate-500 text-xs mt-0.5 truncate max-w-xs">{product.description}</p>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <span className="px-2 py-1 text-xs font-medium text-blue-400 bg-blue-500/10 border border-blue-500/30 rounded-full">
+                                                {product.categoryName}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-4 text-white font-medium">
+                                            {formatVND(product.price)}đ
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <span className={`font-medium ${product.stock > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                {product.stock}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-4 text-slate-300">
+                                            {product.sold}
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full border ${statusConfig[product.status]?.bg || statusConfig.ACTIVE.bg} ${statusConfig[product.status]?.text || statusConfig.ACTIVE.text} ${statusConfig[product.status]?.border || statusConfig.ACTIVE.border}`}>
+                                                {statusConfig[product.status]?.label || product.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <div className="flex items-center gap-1">
+                                                <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors" title="Xem">
+                                                    <Eye size={16} />
+                                                </button>
+                                                <button className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors" title="Sửa">
+                                                    <Edit size={16} />
+                                                </button>
+                                                <button className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Xóa">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
                         </tbody>
                     </table>
                 </div>

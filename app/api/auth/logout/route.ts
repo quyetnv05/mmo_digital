@@ -8,7 +8,7 @@ export async function POST() {
 
     // Clear the token cookie
     response.cookies.set({
-        name: 'token',
+        name: 'auth_token',
         value: '',
         httpOnly: true,
         expires: new Date(0),

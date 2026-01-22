@@ -13,19 +13,26 @@ interface UserData {
     createdAt: string;
 }
 
-export default function AdminUsersPage() {
-    const [users, setUsers] = useState<UserData[]>([
-        { id: 1, username: 'admin', email: 'admin@mmo.com', role: 'ADMIN', status: 'ACTIVE', balance: 10000000, createdAt: '2026-01-01' },
-        { id: 2, username: 'seller_pro', email: 'seller@mmo.com', role: 'SELLER', status: 'ACTIVE', balance: 5000000, createdAt: '2026-01-02' },
-        { id: 3, username: 'buyer_one', email: 'buyer@mmo.com', role: 'BUYER', status: 'ACTIVE', balance: 100000, createdAt: '2026-01-05' },
-        { id: 4, username: 'spammer', email: 'spam@mmo.com', role: 'SELLER', status: 'BANNED', balance: 0, createdAt: '2026-01-10' },
-    ]);
+// ... (imports remain)
+import useSWR from 'swr';
+import { toast } from 'react-hot-toast';
 
-    const roleColors = {
-        ADMIN: 'text-red-400 bg-red-500/10 border-red-500/30',
-        SELLER: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
-        BUYER: 'text-blue-400 bg-blue-500/10 border-blue-500/30',
-    };
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+interface UserData {
+    id: number;
+    username: string;
+    email: string;
+    role: 'BUYER' | 'SELLER' | 'ADMIN';
+    status: 'ACTIVE' | 'BANNED';
+    balance: number;
+    createdAt: string;
+}
+
+export default function AdminUsersPage() {
+    const { data, mutate } = useSWR('/api/admin/users', fetcher);
+    const users: UserData[] = data?.data || [];
+    const isLoading = !data && !data?.error;
 
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -33,6 +40,34 @@ export default function AdminUsersPage() {
         user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
         user.email.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const handleUpdateStatus = async (userId: number, currentStatus: string) => {
+        const newStatus = currentStatus === 'ACTIVE' ? 'BANNED' : 'ACTIVE';
+        if (!confirm(`Bạn có chắc muốn ${newStatus === 'BANNED' ? 'KHÓA' : 'MỞ KHÓA'} user này?`)) return;
+
+        try {
+            const res = await fetch('/api/admin/users', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, status: newStatus })
+            });
+            const result = await res.json();
+            if (result.success) {
+                toast.success('Cập nhật thành công');
+                mutate();
+            } else {
+                toast.error('Lỗi: ' + result.error);
+            }
+        } catch (error) {
+            toast.error('Lỗi kết nối');
+        }
+    };
+
+    const roleColors = {
+        ADMIN: 'text-red-400 bg-red-500/10 border-red-500/30',
+        SELLER: 'text-purple-400 bg-purple-500/10 border-purple-500/30',
+        BUYER: 'text-blue-400 bg-blue-500/10 border-blue-500/30',
+    };
 
     return (
         <div className="space-y-6">
@@ -76,7 +111,15 @@ export default function AdminUsersPage() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-700/50">
-                            {filteredUsers.map((user) => (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">Đang tải...</td>
+                                </tr>
+                            ) : filteredUsers.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">Không tìm thấy user nào</td>
+                                </tr>
+                            ) : filteredUsers.map((user) => (
                                 <tr key={user.id} className="hover:bg-slate-700/30 transition-colors">
                                     <td className="px-4 py-4">
                                         <div className="flex items-center gap-3">
@@ -112,11 +155,16 @@ export default function AdminUsersPage() {
                                         {user.createdAt}
                                     </td>
                                     <td className="px-4 py-4 text-right">
-                                        <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors" title="Sửa quyền">
-                                            <Shield size={16} />
-                                        </button>
-                                        <button className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Ban user">
-                                            <Ban size={16} />
+                                        <button
+                                            onClick={() => handleUpdateStatus(user.id, user.status)}
+                                            className={`p-2 rounded-lg transition-colors ${user.status === 'ACTIVE'
+                                                    ? 'text-red-400 hover:bg-red-500/10'
+                                                    : 'text-green-400 hover:bg-green-500/10'
+                                                }`}
+                                            title={user.status === 'ACTIVE' ? "Ban user" : "Unban user"}
+                                            disabled={user.role === 'ADMIN'}
+                                        >
+                                            {user.status === 'ACTIVE' ? <Ban size={16} /> : <CheckCircle size={16} />}
                                         </button>
                                     </td>
                                 </tr>

@@ -14,6 +14,8 @@ import {
     LogOut,
     ChevronLeft,
     Menu,
+    BarChart3,
+    Heart,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -54,6 +56,12 @@ const menuItems: MenuItem[] = [
         href: '/dashboard/disputes',
         roles: ['BUYER', 'SELLER', 'ADMIN'],
     },
+    {
+        icon: <Heart size={20} />, // Need to import Heart
+        label: 'Yêu thích',
+        href: '/dashboard/wishlist',
+        roles: ['BUYER'],
+    },
     // Seller & Admin only
     {
         icon: <Package size={20} />,
@@ -74,6 +82,12 @@ const menuItems: MenuItem[] = [
         roles: ['SELLER', 'ADMIN'],
     },
     // Admin only
+    {
+        icon: <BarChart3 size={20} />,
+        label: 'Thống kê',
+        href: '/dashboard/admin/statistics',
+        roles: ['ADMIN'],
+    },
     {
         icon: <Users size={20} />,
         label: 'Người dùng',

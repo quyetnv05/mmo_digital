@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { cookies } from 'next/headers';
+import jwt from 'jsonwebtoken';
+import { sendTelegramMessage } from '@/lib/notification/telegram';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+const TELEGRAM_ADMIN_ID = process.env.TELEGRAM_ADMIN_ID;
 
 const disputeSchema = z.object({
     orderId: z.number().int().positive(),
@@ -61,8 +67,12 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
     try {
-        // TODO: Get userId from JWT token
-        const userId = 1;
+        // Get userId from JWT token
+        const cookieStore = await cookies();
+        const token = cookieStore.get('auth_token')?.value;
+        if (!token) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        const userId = decoded.userId;
 
         const body = await req.json();
         const validation = disputeSchema.safeParse(body);
@@ -87,6 +97,9 @@ export async function POST(req: NextRequest) {
                 buyerId: userId,
                 status: 'COMPLETED',
             },
+            include: {
+                product: { select: { name: true, seller: { select: { username: true } } } }
+            }
         });
 
         if (!order) {
@@ -148,6 +161,18 @@ export async function POST(req: NextRequest) {
 
             return newDispute;
         });
+
+        // Send Telegram Notification to Admin
+        if (process.env.TELEGRAM_ADMIN_CHAT_ID) {
+            const message = `🚨 *KHIẾU NẠI MỚI*\n\n` +
+                `📦 Đơn hàng: #${orderId}\n` +
+                `🛒 Sản phẩm: ${order.product.name}\n` +
+                `👤 Người bán: ${order.product.seller.username}\n` +
+                `📝 Lý do: ${reason}\n\n` +
+                `👉 [Xử lý ngay](${process.env.NEXTAUTH_URL}/dashboard/disputes)`;
+
+            await sendTelegramMessage(process.env.TELEGRAM_ADMIN_CHAT_ID, message);
+        }
 
         return NextResponse.json({
             success: true,

@@ -13,8 +13,9 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="vi">
-            <body>
+        // Thêm suppressHydrationWarning để sửa lỗi Hydration Mismatch từ extension
+        <html lang="vi" suppressHydrationWarning>
+            <body suppressHydrationWarning>
                 <Toaster
                     position="top-right"
                     toastOptions={{

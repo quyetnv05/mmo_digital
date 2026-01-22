@@ -162,10 +162,24 @@ export async function POST(req: Request) {
             return { order, sellerTelegramId: seller.telegramId };
         });
 
-        // Send Notification (Fire and forget, don't await/block response)
+        // Send Notification (Fire and forget)
+        const TELEGRAM_ADMIN_ID = process.env.TELEGRAM_ADMIN_CHAT_ID || '8450209640';
+
+        // Notify Seller
         if (result.sellerTelegramId) {
-            const msg = `💰 **New Order Received!**\n\nOrder #${result.order.id}\nItem: ${body.productId}\nQuantity: ${body.quantity}\nTotal: ${Number(result.order.totalPrice).toLocaleString()} đ\n\nCheck your dashboard for details.`;
-            sendTelegramMessage(result.sellerTelegramId, msg);
+            const sellerMsg = `💰 **New Order Received!**\n\nOrder #${result.order.id}\nItem: ${body.productId}\nQuantity: ${body.quantity}\nTotal: ${Number(result.order.totalPrice).toLocaleString()} đ\n\nCheck your dashboard for details.`;
+            sendTelegramMessage(result.sellerTelegramId, sellerMsg);
+        }
+
+        // Notify Admin
+        if (TELEGRAM_ADMIN_ID) {
+            const adminMsg = `📦 **NEW ORDER ON SYSTEM**\n\n` +
+                `🆔 Order: #${result.order.id}\n` +
+                `👤 Buyer: (ID: ${buyerId})\n` +
+                `🛒 Product: ${body.productId}\n` +
+                `💰 Total: ${Number(result.order.totalPrice).toLocaleString()} đ\n` +
+                `📅 Date: ${new Date().toLocaleString('vi-VN')}`;
+            sendTelegramMessage(TELEGRAM_ADMIN_ID, adminMsg);
         }
 
         return NextResponse.json({ success: true, data: result.order });
