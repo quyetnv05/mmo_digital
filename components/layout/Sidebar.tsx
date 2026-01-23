@@ -81,6 +81,12 @@ const menuItems: MenuItem[] = [
         href: '/dashboard/seller/bulk-upload',
         roles: ['SELLER', 'ADMIN'],
     },
+    {
+        icon: <Wallet size={20} />,
+        label: 'Rút tiền',
+        href: '/dashboard/withdrawals',
+        roles: ['SELLER', 'ADMIN'],
+    },
     // Admin only
     {
         icon: <BarChart3 size={20} />,

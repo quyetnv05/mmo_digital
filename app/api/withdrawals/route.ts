@@ -63,7 +63,7 @@ export async function POST(req: Request) {
 
             await prisma.$transaction(async (tx) => {
                 const user = await tx.user.findUnique({ where: { id: decoded.userId } });
-                if (!user || user.balance < amount) throw new Error('Insufficient balance');
+                if (!user || Number(user.balance) < amount) throw new Error('Insufficient balance');
 
                 // Deduct Balance
                 const newBalance = Number(user.balance) - amount;
@@ -94,6 +94,9 @@ export async function POST(req: Request) {
                     undefined,
                     `Request withdrawal to ${bankName}`
                 );
+            }, {
+                timeout: 30000, // 30 seconds timeout
+                maxWait: 10000, // Max 10 seconds wait for connection
             });
 
             // Send Telegram Notification to Admin

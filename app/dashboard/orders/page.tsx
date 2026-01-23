@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import useSWR from 'swr';
-import { ShoppingCart, Eye, Copy, CheckCircle, Clock, AlertTriangle, Package, Download, Loader2 } from 'lucide-react';
+import { ShoppingCart, Eye, Copy, CheckCircle, Clock, AlertTriangle, Package, Download, Loader2, X } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 interface OrderItem {
     id: number;
@@ -14,7 +15,7 @@ interface Order {
     productName: string;
     quantity: number;
     totalPrice: number;
-    status: 'completed' | 'pending' | 'disputed' | 'refunded';
+    status: 'completed' | 'pending' | 'disputed' | 'refunded' | 'COMPLETED' | 'PENDING' | 'DISPUTED' | 'REFUNDED';
     escrowDeadline: string;
     createdAt: string;
     items: OrderItem[];
@@ -138,10 +139,105 @@ function OrderDetailModal({
     );
 }
 
+// Dispute Modal Component
+function DisputeModal({
+    order,
+    onClose,
+    onSuccess
+}: {
+    order: Order;
+    onClose: () => void;
+    onSuccess: () => void;
+}) {
+    const [reason, setReason] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSubmit = async () => {
+        if (!reason.trim()) {
+            toast.error('Vui lòng nhập lý do khiếu nại');
+            return;
+        }
+        setIsSubmitting(true);
+        try {
+            const res = await fetch('/api/disputes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orderId: parseInt(order.id), reason: reason.trim() })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success('Khiếu nại đã được gửi thành công!');
+                onSuccess();
+                onClose();
+            } else {
+                toast.error(data.message || 'Không thể gửi khiếu nại');
+            }
+        } catch (error) {
+            toast.error('Lỗi kết nối');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+            <div className="relative bg-slate-800 border border-slate-700 rounded-xl w-full max-w-md p-6">
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 text-slate-400 hover:text-white"
+                >
+                    <X size={20} />
+                </button>
+                <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                    <AlertTriangle className="text-amber-400" size={20} />
+                    Khiếu nại đơn hàng #{order.id}
+                </h3>
+                <p className="text-sm text-slate-400 mb-4">{order.productName}</p>
+
+                <div className="mb-4">
+                    <label className="block text-sm text-slate-300 mb-2">Lý do khiếu nại *</label>
+                    <textarea
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        placeholder="Mô tả chi tiết vấn đề bạn gặp phải..."
+                        className="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
+                        rows={4}
+                    />
+                </div>
+
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mb-4">
+                    <p className="text-amber-400 text-sm">
+                        ⚠️ Lưu ý: Khiếu nại chỉ được chấp nhận trong thời gian bảo hành. Admin sẽ xem xét trong 24-48h.
+                    </p>
+                </div>
+
+                <div className="flex gap-3">
+                    <button
+                        onClick={onClose}
+                        className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                    >
+                        Hủy
+                    </button>
+                    <button
+                        onClick={handleSubmit}
+                        disabled={isSubmitting}
+                        className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : <AlertTriangle size={16} />}
+                        {isSubmitting ? 'Đang gửi...' : 'Gửi khiếu nại'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function OrdersPage() {
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+    const [disputeOrder, setDisputeOrder] = useState<Order | null>(null);
     const fetcher = (url: string) => fetch(url).then((res) => res.json());
-    const { data, isLoading } = useSWR('/api/orders', fetcher);
+    const { data, isLoading, mutate } = useSWR('/api/orders', fetcher);
     const orders: Order[] = data?.data || [];
 
     const statusColors: Record<string, { bg: string; text: string; border: string; label: string }> = {
@@ -240,8 +336,9 @@ export default function OrdersPage() {
                                             >
                                                 <Eye size={16} />
                                             </button>
-                                            {order.status === 'completed' && (
+                                            {(order.status === 'completed' || order.status === 'COMPLETED' || order.status === 'pending' || order.status === 'PENDING') && (
                                                 <button
+                                                    onClick={() => setDisputeOrder(order)}
                                                     className="p-2 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-colors"
                                                     title="Khiếu nại"
                                                 >
@@ -262,6 +359,15 @@ export default function OrdersPage() {
                 <OrderDetailModal
                     order={selectedOrder}
                     onClose={() => setSelectedOrder(null)}
+                />
+            )}
+
+            {/* Dispute Modal */}
+            {disputeOrder && (
+                <DisputeModal
+                    order={disputeOrder}
+                    onClose={() => setDisputeOrder(null)}
+                    onSuccess={() => mutate()}
                 />
             )}
         </div>
