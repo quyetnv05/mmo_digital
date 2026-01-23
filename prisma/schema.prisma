@@ -73,6 +73,7 @@ model Product {
   seller        User          @relation(fields: [sellerId], references: [id])
   categoryId    Int
   category      Category      @relation(fields: [categoryId], references: [id])
+  imageUrl      String?       // URL ảnh sản phẩm
   warrantyHours Int           @default(24) // Thời gian bảo hành
   status        ProductStatus @default(ACTIVE)
   

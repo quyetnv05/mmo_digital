@@ -13,7 +13,8 @@ const productSchema = z.object({
     price: z.number().min(1000),
     categoryId: z.number().int().positive(),
     warrantyHours: z.number().int().min(0).default(24),
-    variant: z.string().optional()
+    variant: z.string().optional(),
+    imageUrl: z.string().optional()
 });
 
 export async function POST(req: NextRequest) {

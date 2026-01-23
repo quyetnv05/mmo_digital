@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Loader2, DollarSign, Clock, Package, AlignLeft, Tag } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, DollarSign, Clock, Package, AlignLeft, Tag, ImagePlus, X } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 
@@ -23,8 +23,11 @@ export default function CreateProductPage() {
         price: '',
         categoryId: '',
         warrantyHours: '24',
-        variant: ''
+        variant: '',
+        imageUrl: ''
     });
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
 
     // Fetch Categories
     useEffect(() => {
@@ -41,6 +44,54 @@ export default function CreateProductPage() {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    // Handle Image Upload
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validate file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error('Ảnh quá lớn. Tối đa 5MB');
+            return;
+        }
+
+        // Preview
+        const reader = new FileReader();
+        reader.onload = (e) => setImagePreview(e.target?.result as string);
+        reader.readAsDataURL(file);
+
+        // Upload
+        setIsUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                setFormData(prev => ({ ...prev, imageUrl: data.url }));
+                toast.success('Upload ảnh thành công!');
+            } else {
+                toast.error(data.error || 'Lỗi upload ảnh');
+                setImagePreview(null);
+            }
+        } catch (error) {
+            toast.error('Lỗi kết nối');
+            setImagePreview(null);
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const removeImage = () => {
+        setImagePreview(null);
+        setFormData(prev => ({ ...prev, imageUrl: '' }));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
@@ -52,7 +103,8 @@ export default function CreateProductPage() {
                 price: parseFloat(formData.price),
                 categoryId: parseInt(formData.categoryId),
                 warrantyHours: parseInt(formData.warrantyHours),
-                variant: formData.variant
+                variant: formData.variant,
+                imageUrl: formData.imageUrl || undefined
             };
 
             const res = await fetch('/api/products', {
@@ -139,6 +191,50 @@ export default function CreateProductPage() {
                             placeholder="Mô tả chi tiết về sản phẩm, chế độ bảo hành..."
                             className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-colors resize-none"
                         />
+                    </div>
+
+                    {/* Image Upload */}
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-300">Ảnh sản phẩm</label>
+                        <div className="relative">
+                            {imagePreview ? (
+                                <div className="relative w-full h-48 rounded-lg overflow-hidden border border-slate-600">
+                                    <img
+                                        src={imagePreview}
+                                        alt="Preview"
+                                        className="w-full h-full object-cover"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={removeImage}
+                                        className="absolute top-2 right-2 p-1.5 bg-red-500 hover:bg-red-400 rounded-full text-white transition-colors"
+                                    >
+                                        <X size={16} />
+                                    </button>
+                                    {isUploading && (
+                                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                            <Loader2 className="animate-spin text-white" size={32} />
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-slate-600 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-slate-700/30 transition-all">
+                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                        <ImagePlus className="text-slate-400 mb-3" size={40} />
+                                        <p className="text-sm text-slate-400">
+                                            <span className="font-semibold text-blue-400">Click để upload</span> hoặc kéo thả ảnh
+                                        </p>
+                                        <p className="text-xs text-slate-500 mt-1">PNG, JPG, GIF, WEBP (Max 5MB)</p>
+                                    </div>
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        accept="image/jpeg,image/png,image/gif,image/webp"
+                                        onChange={handleImageUpload}
+                                    />
+                                </label>
+                            )}
+                        </div>
                     </div>
                 </div>
 
