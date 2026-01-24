@@ -1,7 +1,7 @@
 import { AlertTriangle, MessageSquare, Clock, Send, CheckCircle, XCircle } from 'lucide-react';
+import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
 
@@ -24,13 +24,38 @@ export default async function DisputesPage() {
     }
 
     // Fetch Disputes from DB
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true }
+    });
+
+    if (!user) redirect('/auth/login');
+
+    // Fetch Disputes based on Role
+    let whereClause: any = { openedBy: userId }; // Default: Buyer sees only their own
+
+    if (user.role === 'ADMIN') {
+        whereClause = {}; // Admin sees all
+    } else if (user.role === 'SELLER') {
+        // Seller sees disputes they opened OR disputes against their sales
+        whereClause = {
+            OR: [
+                { openedBy: userId },
+                { order: { product: { sellerId: userId } } }
+            ]
+        };
+    }
+
     const disputes = await prisma.dispute.findMany({
-        where: { openedBy: userId },
+        where: whereClause,
         include: {
             order: {
                 include: {
                     product: true
                 }
+            },
+            user: { // Include opener info for Admin/Seller visibility
+                select: { username: true }
             }
         },
         orderBy: { createdAt: 'desc' },
@@ -86,9 +111,9 @@ export default async function DisputesPage() {
     // "Đang xử lý" = (User requested this, but Schema has only OPEN. We can assume OPEN covers both or check logical status. Let's just use OPEN for both Pending/Processing conceptually or if we had a PROCESSING enum).
     // Let's filter strict Enums.
 
-    const countOpen = disputes.filter(d => d.status === 'OPEN').length;
+    const countOpen = disputes.filter((d: any) => d.status === 'OPEN').length;
     // We treat 'RESOLVED' generally as concluded
-    const countResolved = disputes.filter(d => d.status === 'RESOLVED_REFUNDED' || d.status === 'RESOLVED_RELEASED').length;
+    const countResolved = disputes.filter((d: any) => d.status === 'RESOLVED_REFUNDED' || d.status === 'RESOLVED_RELEASED').length;
     // For "Đang xử lý" (Processing), since we lack the Enum, we'll display 0 or merge with Open. 
     // User requested "Đang mở (PENDING)" and "Đang xử lý (PROCESSING)".
     // If we only have OPEN, let's put countOpen in "Đang mở" and 0 in "Đang xử lý" to respect Schema, or maybe "Đang xử lý" is "OPEN" disputes that are assigned? 
@@ -134,7 +159,7 @@ export default async function DisputesPage() {
                         <p className="text-slate-400">Bạn chưa có khiếu nại nào</p>
                     </div>
                 ) : (
-                    disputes.map((dispute) => {
+                    disputes.map((dispute: any) => {
                         const status = getStatusConfig(dispute.status);
                         return (
                             <div
@@ -147,6 +172,8 @@ export default async function DisputesPage() {
                                             <span className="text-blue-400 font-medium">#{dispute.id}</span>
                                             <span className="text-slate-500">•</span>
                                             <span className="text-slate-400 text-sm">Đơn #{dispute.orderId}</span>
+                                            <span className="text-slate-500">•</span>
+                                            <span className="text-slate-300 text-sm">Bởi: {dispute.user?.username || 'Unknown'}</span>
                                             <span className={`ml-2 inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border ${status.bg} ${status.text} ${status.border}`}>
                                                 {status.icon}
                                                 {status.label}
@@ -162,14 +189,14 @@ export default async function DisputesPage() {
 
                                     <div className="flex items-center gap-2">
                                         {/* Client Component Button or Link */}
-                                        <button className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors">
+                                        <Link href={`/dashboard/disputes/${dispute.id}`} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium rounded-lg transition-colors">
                                             Xem chi tiết
-                                        </button>
+                                        </Link>
                                         {dispute.status === 'OPEN' && (
-                                            <button className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg flex items-center gap-2 transition-colors">
+                                            <Link href={`/dashboard/disputes/${dispute.id}`} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg flex items-center gap-2 transition-colors">
                                                 <Send size={14} />
                                                 Gửi phản hồi
-                                            </button>
+                                            </Link>
                                         )}
                                     </div>
                                 </div>

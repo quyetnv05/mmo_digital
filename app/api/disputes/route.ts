@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
             orderBy: { createdAt: 'desc' },
         });
 
-        const formattedDisputes = disputes.map((dispute) => ({
+        const formattedDisputes = disputes.map((dispute: any) => ({
             id: dispute.id.toString(),
             orderId: dispute.orderId.toString(),
             productName: dispute.order.product.name,
@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Create dispute and update order status
-        const dispute = await prisma.$transaction(async (tx) => {
+        const dispute = await prisma.$transaction(async (tx: any) => {
             // Create dispute
             const newDispute = await tx.dispute.create({
                 data: {

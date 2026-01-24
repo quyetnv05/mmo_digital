@@ -61,7 +61,7 @@ export async function POST(req: Request) {
             // If rejected, refund it.
             // Let's deduct immediately to prevent double spending.
 
-            await prisma.$transaction(async (tx) => {
+            await prisma.$transaction(async (tx: any) => {
                 const user = await tx.user.findUnique({ where: { id: decoded.userId } });
                 if (!user || Number(user.balance) < amount) throw new Error('Insufficient balance');
 
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
                 // Optionally log "WITHDRAW_SUCCESS".
             } else {
                 // REJECT -> Refund
-                await prisma.$transaction(async (tx) => {
+                await prisma.$transaction(async (tx: any) => {
                     await tx.withdrawalRequest.update({
                         where: { id },
                         data: { status: 'REJECTED', rejectionReason: body.reason }

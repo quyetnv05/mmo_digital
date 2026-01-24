@@ -103,14 +103,14 @@ export async function GET(req: NextRequest) {
         });
 
         // Transform to flatten stock count and calculate rating
-        let formatted = products.map(p => {
+        let formatted = products.map((p: any) => {
             // Calculate Average Rating manually if not using aggregation group by
             // Or use the aggregate function. Since findMany doesn't support _avg directly with include easily without validation change.
             // Actually, best way in simple relation is valid:
             // But Prisma `include` doesn't do `_avg` directly on relation unless we use `aggregate` which returns separate object.
             // WORKAROUND: Fetch reviews and calculate JS side (OK for small scale) OR raw query.
             // Given "User Request: calculate _avg", let's do JS calc for now as it is safest with standard Prisma Client usage in `findMany`.
-            const ratingSum = p.reviews.reduce((acc, r) => acc + r.rating, 0);
+            const ratingSum = p.reviews.reduce((acc: number, r: any) => acc + r.rating, 0);
             const ratingAvg = p.reviews.length > 0 ? ratingSum / p.reviews.length : 5.0; // Default 5 stars if new
 
             return {
@@ -123,13 +123,14 @@ export async function GET(req: NextRequest) {
                 stock: p._count.items,
                 variant: p.variant,
                 rating: ratingAvg,
-                reviewCount: p._count.reviews
+                reviewCount: p._count.reviews,
+                imageUrl: p.imageUrl
             };
         });
 
         // Apply stock filter
         if (inStockOnly) {
-            formatted = formatted.filter(p => p.stock > 0);
+            formatted = formatted.filter((p: any) => p.stock > 0);
         }
 
         return NextResponse.json({ success: true, data: formatted });

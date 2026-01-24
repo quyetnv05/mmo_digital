@@ -9,7 +9,8 @@ import {
     Star,
     Shield,
     Zap,
-    Heart
+    Heart,
+    Package
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -23,6 +24,7 @@ export interface Product {
     warrantyHours: number;
     rating?: number; // Added rating
     reviewCount?: number; // Added count
+    imageUrl?: string | null; // Added imageUrl
 }
 
 export default function ProductCard({ product, initialWishlistState = false }: { product: Product; initialWishlistState?: boolean }) {
@@ -168,13 +170,32 @@ export default function ProductCard({ product, initialWishlistState = false }: {
                     <Heart size={18} className={isWishlisted ? 'fill-rose-500' : ''} />
                 </button>
 
-                {/* Content */}
-                <div className="relative p-5 flex flex-col flex-1">
-                    {/* Category Badge & Rating */}
-                    <div className="flex items-center justify-between mb-3 pr-8">
-                        <span className="px-2 py-1 text-xs font-medium text-blue-400 bg-blue-500/10 border border-blue-500/30 rounded-full">
+                {/* Product Image */}
+                <div className="relative aspect-[16/9] bg-slate-900 border-b border-slate-700/50 overflow-hidden">
+                    {product.imageUrl ? (
+                        <img
+                            src={product.imageUrl}
+                            alt={product.name}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-700">
+                            <Package size={48} strokeWidth={1} />
+                        </div>
+                    )}
+
+                    {/* Category Badge - Now overlays image */}
+                    <div className="absolute top-3 left-3">
+                        <span className="px-2 py-1 text-xs font-medium text-white bg-black/50 backdrop-blur-md border border-white/10 rounded-full">
                             {product.category}
                         </span>
+                    </div>
+                </div>
+
+                {/* Content */}
+                <div className="relative p-5 flex flex-col flex-1">
+                    {/* Rating - Moved here */}
+                    <div className="flex items-center justify-end mb-2">
                         <div className="flex items-center gap-1 text-amber-400">
                             <Star size={14} className="fill-amber-400" />
                             <span className="text-xs font-medium">

@@ -29,7 +29,7 @@ export async function GET(req: Request) {
             orderBy: { createdAt: 'desc' }
         });
 
-        const formattedUsers = users.map(u => ({
+        const formattedUsers = users.map((u: any) => ({
             ...u,
             balance: Number(u.balance),
             createdAt: u.createdAt.toISOString().split('T')[0]

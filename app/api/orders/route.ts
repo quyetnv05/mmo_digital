@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
             orderBy: { createdAt: 'desc' },
         });
 
-        const formattedOrders = orders.map((order) => ({
+        const formattedOrders = orders.map((order: any) => ({
             id: order.id.toString(),
             productId: order.productId,
             productName: order.product.name,
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
             escrowDeadline: order.escrowDeadline.toISOString(),
             isReleased: order.isReleased,
             createdAt: order.createdAt.toISOString(),
-            items: order.items.map((item) => ({
+            items: order.items.map((item: any) => ({
                 id: item.id,
                 content: item.content,
             })),

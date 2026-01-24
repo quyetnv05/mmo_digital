@@ -1,6 +1,7 @@
 'use client';
 
 import { Bell, Search, Wallet, TrendingUp, User } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 import { useBalance } from '@/lib/hooks/useData';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -27,6 +28,19 @@ export default function Header({ username }: HeaderProps) {
     return (
         <header className="sticky top-0 z-30 h-16 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700/50">
             <div className="flex items-center justify-between h-full px-4 lg:px-6">
+                {/* Navigation Links */}
+                <nav className="hidden md:flex items-center gap-6 mr-8">
+                    <Link href="/" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                        Cửa hàng
+                    </Link>
+                    <Link href="/faq" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                        Hỏi đáp
+                    </Link>
+                    <Link href="/dashboard/deposit" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">
+                        Nạp tiền
+                    </Link>
+                </nav>
+
                 {/* Search */}
                 <div className="flex-1 max-w-md">
                     <div className="relative">

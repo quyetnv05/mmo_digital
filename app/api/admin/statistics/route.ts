@@ -59,8 +59,8 @@ export async function GET(req: Request) {
             _count: true
         });
 
-        const pendingDisputesCount = disputeStats.find(d => d.status === 'OPEN')?._count || 0;
-        const resolvedDisputesCount = disputeStats.filter(d => d.status !== 'OPEN').reduce((acc, curr) => acc + curr._count, 0);
+        const pendingDisputesCount = disputeStats.find((d: any) => d.status === 'OPEN')?._count || 0;
+        const resolvedDisputesCount = disputeStats.filter((d: any) => d.status !== 'OPEN').reduce((acc: number, curr: any) => acc + curr._count, 0);
 
         // Fetch Recent Disputes
         const recentDisputes = await prisma.dispute.findMany({
@@ -80,7 +80,7 @@ export async function GET(req: Request) {
             }
         });
 
-        const formattedDisputes = recentDisputes.map(d => ({
+        const formattedDisputes = recentDisputes.map((d: any) => ({
             id: d.id,
             buyerName: d.user.username,
             sellerName: d.order.product.seller.username,
@@ -114,8 +114,8 @@ export async function GET(req: Request) {
         });
 
         const lowStockProducts = productsWithStock
-            .filter(p => p._count.items <= 5)
-            .map(p => ({
+            .filter((p: any) => p._count.items <= 5)
+            .map((p: any) => ({
                 id: p.id,
                 name: p.name,
                 category: p.category.name,
@@ -144,7 +144,7 @@ export async function GET(req: Request) {
         }
 
         // Fill with actual data
-        dailyOrders.forEach(order => {
+        dailyOrders.forEach((order: any) => {
             const dateStr = new Date(order.createdAt).toISOString().split('T')[0];
             const existing = dateMap.get(dateStr) || { revenue: 0, orders: 0 };
             dateMap.set(dateStr, {

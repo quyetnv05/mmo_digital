@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowLeft, Shield, Zap, CheckCircle, Package, Star } from 'lucide-react';
 import ProductActions from '@/components/products/ProductActions';
 import ReviewForm from '@/components/reviews/ReviewForm';
+import ChatSellerButton from '@/components/products/ChatSellerButton';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 
@@ -161,6 +162,9 @@ export default async function ProductDetailPage({ params }: Props) {
                                     </p>
                                 </div>
                             </div>
+
+                            {/* Chat Button */}
+                            <ChatSellerButton sellerId={product.sellerId} productId={product.id} />
                         </div>
 
                         {/* Reviews Section */}
@@ -176,7 +180,7 @@ export default async function ProductDetailPage({ params }: Props) {
 
                             <div className="space-y-6">
                                 {reviews.length > 0 ? (
-                                    reviews.map((review) => (
+                                    reviews.map((review: any) => (
                                         <div key={review.id} className="border-b border-slate-800 last:border-0 pb-6 last:pb-0">
                                             <div className="flex items-center justify-between mb-2">
                                                 <div className="flex items-center gap-3">

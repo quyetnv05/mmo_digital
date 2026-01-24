@@ -4,6 +4,8 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '@/lib/prisma';
 import { redirect } from 'next/navigation';
 
+export const dynamic = 'force-dynamic';
+
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
 // Helper to get currency format
@@ -157,7 +159,7 @@ export default async function DashboardPage() {
         take: 5
     });
 
-    const recentOrders = recentOrdersRaw.map(o => ({
+    const recentOrders = recentOrdersRaw.map((o: any) => ({
         ...o,
         isSeller: o.product.sellerId === userId
     }));

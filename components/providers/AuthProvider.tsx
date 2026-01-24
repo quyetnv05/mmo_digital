@@ -30,13 +30,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // However, for the initial state or when we manually login, we might want manual control.
     // Actually, standard SWR approach is good if the /api/auth/profile endpoint exists and uses cookies.
 
-    // Let's assume /api/auth/profile returns the current user based on cookie
-    const { data, error, mutate } = useSWR('/api/auth/profile', {
-        shouldRetryOnError: false,
-        revalidateOnFocus: false,
-    });
+    // We use SWR to fetch user profile if token exists (handled by cookies automatically in API requests)
+    const { data, error, mutate, isLoading: isSwrLoading } = useSWR('/api/auth/profile',
+        (url) => fetch(url).then(res => res.json()),
+        {
+            shouldRetryOnError: false,
+            revalidateOnFocus: false,
+        }
+    );
 
     const [user, setUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         if (data && data.success) {
@@ -44,7 +48,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else if (error || (data && !data.success)) {
             setUser(null);
         }
-    }, [data, error]);
+        setIsLoading(isSwrLoading);
+    }, [data, error, isSwrLoading]);
 
     const login = (token: string, userData: User) => {
         // In a real app with httpOnly cookies, the token is set by the server response header.
@@ -85,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         <AuthContext.Provider
             value={{
                 user,
-                isLoading: !error && !data,
+                isLoading,
                 isError: !!error,
                 login,
                 logout,

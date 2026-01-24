@@ -28,7 +28,7 @@ export async function POST(req: Request) {
         if (!productId) return NextResponse.json({ success: false, error: 'Missing productId' }, { status: 400 });
 
         // 3. Atomic Transaction
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: any) => {
             // A. Fetch Product & Buyer
             const product = await tx.product.findUnique({ where: { id: productId } });
             if (!product) throw new Error('Product not found');
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
                 throw new Error('Insufficient stock');
             }
 
-            const itemIds = items.map(i => i.id);
+            const itemIds = items.map((i: any) => i.id);
 
             // D. Create Order
             // Calculate escrow deadline (e.g. 24h from now)
@@ -160,6 +160,9 @@ export async function POST(req: Request) {
             // Usually we log EARNING when it's released. For now, just pendingBalance is updated.
 
             return { order, sellerTelegramId: seller.telegramId };
+        }, {
+            maxWait: 5000, // Wait max 5s for transaction to start
+            timeout: 20000 // Allow 20s for transaction to complete (prevents P2028)
         });
 
         // Send Notification (Fire and forget)

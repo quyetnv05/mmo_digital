@@ -16,6 +16,7 @@ import {
     Menu,
     BarChart3,
     Heart,
+    MessageSquare,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -54,6 +55,12 @@ const menuItems: MenuItem[] = [
         icon: <AlertTriangle size={20} />,
         label: 'Khiếu nại',
         href: '/dashboard/disputes',
+        roles: ['BUYER', 'SELLER', 'ADMIN'],
+    },
+    {
+        icon: <MessageSquare size={20} />,
+        label: 'Tin nhắn',
+        href: '/dashboard/messages',
         roles: ['BUYER', 'SELLER', 'ADMIN'],
     },
     {

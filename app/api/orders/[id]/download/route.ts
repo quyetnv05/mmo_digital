@@ -45,7 +45,7 @@ export async function GET(
         }
 
         // 6. Generate Content (Thay thế cho dữ liệu fix cứng)
-        const fileContent = order.items.map(item => {
+        const fileContent = order.items.map((item: any) => {
             let fullLine = item.content;
             if (item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)) {
                 const meta = item.metadata as any;
