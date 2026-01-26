@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
+
 import jwt from 'jsonwebtoken';
+import { decryptData } from '@/lib/crypto';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
@@ -52,10 +54,19 @@ export async function GET(req: NextRequest) {
             escrowDeadline: order.escrowDeadline.toISOString(),
             isReleased: order.isReleased,
             createdAt: order.createdAt.toISOString(),
-            items: order.items.map((item: any) => ({
-                id: item.id,
-                content: item.content,
-            })),
+            items: order.items.map((item: any) => {
+                try {
+                    return {
+                        id: item.id,
+                        content: decryptData(item.content),
+                    };
+                } catch (e) {
+                    return {
+                        id: item.id,
+                        content: '[Encrypted Data Error]', // Fallback if decryption fails (e.g. old unencrypted data)
+                    };
+                }
+            }),
         }));
 
         return NextResponse.json({

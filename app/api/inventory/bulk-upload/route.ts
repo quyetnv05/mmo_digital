@@ -14,6 +14,8 @@ const bulkUploadSchema = z.object({
     }).optional(),
 });
 
+import { encryptData } from '@/lib/crypto';
+
 /**
  * POST /api/inventory/bulk-upload
  * 
@@ -104,8 +106,8 @@ export async function POST(req: NextRequest) {
             await prisma.productItem.createMany({
                 data: newItems.map((item) => ({
                     productId,
-                    content: item.content,
-                    contentHash: item.contentHash,
+                    content: encryptData(item.content), // Encrypt sensitive data
+                    contentHash: item.contentHash, // Hash of RAW content for unique check
                     metadata: metadata ? JSON.parse(JSON.stringify(metadata)) : undefined,
                     isSold: false,
                 })),
