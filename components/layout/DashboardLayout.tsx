@@ -44,7 +44,11 @@ function DashboardContent({ children }: DashboardLayoutProps) {
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
             {/* Sidebar */}
-            <Sidebar userRole={currentUserRole} />
+            <Sidebar
+                userRole={currentUserRole}
+                collapsed={sidebarCollapsed}
+                onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+            />
 
             {/* Main Content */}
             <div
@@ -74,10 +78,6 @@ function DashboardContent({ children }: DashboardLayoutProps) {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
     return (
-        <SWRProvider>
-            <AuthProvider>
-                <DashboardContent>{children}</DashboardContent>
-            </AuthProvider>
-        </SWRProvider>
+        <DashboardContent>{children}</DashboardContent>
     );
 }

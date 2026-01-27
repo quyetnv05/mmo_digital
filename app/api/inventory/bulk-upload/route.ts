@@ -6,6 +6,7 @@ import crypto from 'crypto';
 
 const bulkUploadSchema = z.object({
     productId: z.number().int().positive(),
+    variantId: z.number().int().positive().optional(),
     content: z.string().min(1), // Multi-line text, one item per line
     metadata: z.object({
         proxy: z.string().optional(),
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        const { productId, content, metadata } = validation.data;
+        const { productId, variantId, content, metadata } = validation.data;
 
         // Verify product exists and belongs to seller
         const product = await prisma.product.findUnique({
@@ -57,6 +58,15 @@ export async function POST(req: NextRequest) {
                 },
                 { status: 404 }
             );
+        }
+
+        if (variantId) {
+            const variant = await prisma.productVariant.findUnique({
+                where: { id: variantId }
+            });
+            if (!variant || variant.productId !== productId) {
+                return NextResponse.json({ success: false, error: 'INVALID_VARIANT' }, { status: 400 });
+            }
         }
 
         // Split content by newlines and filter empty lines
@@ -106,6 +116,7 @@ export async function POST(req: NextRequest) {
             await prisma.productItem.createMany({
                 data: newItems.map((item) => ({
                     productId,
+                    variantId: variantId || null,
                     content: encryptData(item.content), // Encrypt sensitive data
                     contentHash: item.contentHash, // Hash of RAW content for unique check
                     metadata: metadata ? JSON.parse(JSON.stringify(metadata)) : undefined,

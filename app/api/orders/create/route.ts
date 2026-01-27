@@ -23,7 +23,7 @@ export async function POST(req: Request) {
 
         // 2. Input Validation
         const body = await req.json();
-        const { productId, quantity = 1 } = body;
+        const { productId, quantity = 1, variantId } = body;
 
         if (!productId) return NextResponse.json({ success: false, error: 'Missing productId' }, { status: 400 });
 
@@ -34,23 +34,44 @@ export async function POST(req: Request) {
             if (!product) throw new Error('Product not found');
             if (product.status !== 'ACTIVE') throw new Error('Product is not available');
 
+            // Handle Variant Logic
+            let pricePerUnit = Number(product.price);
+            let stockQuery: any = { productId: productId, isSold: false };
+
+            if (variantId) {
+                const variant = await tx.productVariant.findUnique({
+                    where: { id: variantId }
+                });
+
+                if (!variant) throw new Error('Variant not found');
+                if (variant.productId !== productId) throw new Error('Invalid variant for this product');
+
+                pricePerUnit = Number(variant.price);
+                stockQuery.variantId = variantId; // Specific stock
+            } else {
+                // Legacy: Only fetch items with NO variant assigned? 
+                // Or any item? Usually if buying "Base" product, we buy items with null variantId.
+                // If migration wasn't done, existing items have null.
+                stockQuery.variantId = null;
+            }
+
             const buyer = await tx.user.findUnique({ where: { id: buyerId } });
             if (!buyer) throw new Error('Buyer not found');
 
             // B. Check Balance
-            const total = Number(product.price) * quantity;
+            const total = pricePerUnit * quantity;
             if (Number(buyer.balance) < total) {
                 throw new Error('Insufficient balance');
             }
 
             // C. Check Stock & Lock Items
             const items = await tx.productItem.findMany({
-                where: { productId: productId, isSold: false },
+                where: stockQuery,
                 take: quantity,
             });
 
             if (items.length < quantity) {
-                throw new Error('Insufficient stock');
+                throw new Error('Insufficient stock for this variant');
             }
 
             const itemIds = items.map((i: any) => i.id);

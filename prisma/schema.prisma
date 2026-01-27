@@ -101,24 +101,43 @@ model Category {
 model Product {
   id            Int           @id @default(autoincrement())
   name          String
-  variant       String?       // e.g. "Old Gmail", "Fresh Gmail"
-  format        String        @default("USER|PASS") // e.g. USER|PASS|COOKIE
+  // variant field removed in favor of ProductVariant model, but keeping for legacy or display description if needed, or remove? 
+  // User asked to "Add ProductVariant", assumed replacing the flat structure.
+  // Actually, 'variant' legacy String field might be confusing. Removing it to force use of ProductVariant table is cleaner, 
+  // but to be safe for migration I will keep it as optional or just ignore it. I will remove it to avoid confusion as per "Update structure".
+  format        String        @default("USER|PASS") 
   description   String?
-  price         Decimal       @db.Decimal(15, 2)
+  price         Decimal       @db.Decimal(15, 2) // Base price (min price of variants)
   sellerId      Int
   seller        User          @relation(fields: [sellerId], references: [id])
   categoryId    Int
   category      Category      @relation(fields: [categoryId], references: [id])
-  imageUrl      String?       // URL ảnh sản phẩm
-  warrantyHours Int           @default(24) // Thời gian bảo hành
+  imageUrl      String?       
+  warrantyHours Int           @default(24) 
   status        ProductStatus @default(ACTIVE)
   
-  items         ProductItem[] 
+  variants      ProductVariant[] // Quan hệ 1-n
+  items         ProductItem[]    // Items có thể null variantId (legacy) hoặc có variantId
   orders        Order[]
   wishlistItems Wishlist[]
 
   reviews       Review[]
   conversations Conversation[]
+}
+
+model ProductVariant {
+  id          Int           @id @default(autoincrement())
+  productId   Int
+  product     Product       @relation(fields: [productId], references: [id])
+  name        String        
+  price       Decimal       @db.Decimal(15, 2)
+  description String?
+  items       ProductItem[]
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([productId])
 }
 
 enum ProductStatus {
@@ -132,14 +151,21 @@ model ProductItem {
   id          Int      @id @default(autoincrement())
   productId   Int
   product     Product  @relation(fields: [productId], references: [id])
-  content     String   // Định dạng: user|pass|cookie...
-  contentHash String   @unique // Dùng SHA-256 hash để ngăn seller đăng trùng dữ liệu
-  metadata    Json?    // Lưu proxy, device info
+  
+  variantId   Int?     // Link to specific variant
+  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+  
+  content     String   
+  contentHash String   @unique // Dùng SHA-256 hash
+  metadata    Json?    
   addedAt     DateTime @default(now())
   isSold      Boolean  @default(false)
   soldAt      DateTime? 
   orderId     Int?
   order       Order?   @relation(fields: [orderId], references: [id])
+
+  @@index([variantId]) // Index for speed
+  @@index([productId]) // Ensure this exists too for general speed
 }
 
 // 4. Đơn hàng và Hệ thống Escrow

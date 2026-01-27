@@ -106,14 +106,33 @@ export async function generateSafeContent(prompt: string, userId?: number) {
                         status: 'ACTIVE'
                     },
                     take: 5,
-                    select: { name: true, price: true }
+                    select: {
+                        name: true,
+                        price: true,
+                        variants: {
+                            select: {
+                                name: true,
+                                price: true
+                            }
+                        }
+                    }
+                });
+
+                // Format products with variants for AI context
+                const formattedProducts = products.map(p => {
+                    let info = `${p.name} - ${p.price}`;
+                    if (p.variants && p.variants.length > 0) {
+                        const variantInfo = p.variants.map(v => `${v.name}: ${v.price}`).join(', ');
+                        info += ` (Variants: ${variantInfo})`;
+                    }
+                    return info;
                 });
 
                 const funcResult = await chat.sendMessage([
                     {
                         functionResponse: {
                             name: 'searchProducts',
-                            response: { products: products }
+                            response: { products: formattedProducts }
                         }
                     }
                 ]);

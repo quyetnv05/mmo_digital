@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
+import ProductActions from './ProductActions';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 
@@ -39,7 +40,10 @@ export default async function ProductsPage() {
     // Fetch Products
     // We fetch items' isSold status to calculate stock/sold
     const productsRaw = await prisma.product.findMany({
-        where: { sellerId: userId },
+        where: {
+            sellerId: userId,
+            status: { not: 'DELETED' }
+        },
         include: {
             category: true,
             items: {
@@ -188,17 +192,9 @@ export default async function ProductsPage() {
                                             </span>
                                         </td>
                                         <td className="px-4 py-4">
-                                            <div className="flex items-center gap-1">
-                                                <button className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors" title="Xem">
-                                                    <Eye size={16} />
-                                                </button>
-                                                <button className="p-2 text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors" title="Sửa">
-                                                    <Edit size={16} />
-                                                </button>
-                                                <button className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" title="Xóa">
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
+                                            <td className="px-4 py-4">
+                                                <ProductActions product={product} />
+                                            </td>
                                         </td>
                                     </tr>
                                 ))

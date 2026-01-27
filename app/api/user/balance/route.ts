@@ -1,72 +1,35 @@
-'use server';
-
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
+import { authOptions } from '@/lib/auth';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+export const dynamic = 'force-dynamic';
 
-// Helper to get authenticated user ID from JWT
-async function getUserId(): Promise<number | null> {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('auth_token')?.value;
-
-    if (!token) return null;
-
+export async function GET() {
     try {
-        const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
-        return decoded.userId;
-    } catch (e) {
-        return null;
-    }
-}
+        const session = await getServerSession(authOptions);
 
-/**
- * GET /api/user/balance
- * 
- * Lightweight endpoint to fetch just the user's balance
- * Used for realtime updates in header
- */
-export async function GET(req: NextRequest) {
-    try {
-        // Get userId from JWT token - NO MORE HARDCODED VALUE!
-        const userId = await getUserId();
-
-        if (!userId) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
+        if (!session?.user?.email) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        // Fetch latest balance from DB
         const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: {
-                balance: true,
-                pendingBalance: true,
-            },
+            where: { email: session.user.email },
+            select: { balance: true }
         });
 
         if (!user) {
-            return NextResponse.json(
-                { success: false, error: 'User not found' },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
         return NextResponse.json({
             success: true,
-            data: {
-                balance: Number(user.balance),
-                pendingBalance: Number(user.pendingBalance),
-            },
+            balance: Number(user.balance)
         });
+
     } catch (error) {
-        console.error('Balance fetch error:', error);
-        return NextResponse.json(
-            { success: false, error: 'Failed to fetch balance' },
-            { status: 500 }
-        );
+        console.error('Balance API Error:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }

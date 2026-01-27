@@ -4,10 +4,17 @@ import { useState } from 'react';
 import { Upload, Package, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
+interface Variant {
+    id: number;
+    name: string;
+    stock: number;
+}
+
 interface Product {
     id: number;
     name: string;
     stock: number;
+    variants?: Variant[];
 }
 
 interface InventoryFormProps {
@@ -16,6 +23,7 @@ interface InventoryFormProps {
 
 export default function InventoryForm({ products }: InventoryFormProps) {
     const [selectedProduct, setSelectedProduct] = useState<number | null>(null);
+    const [selectedVariant, setSelectedVariant] = useState<number | null>(null);
     const [content, setContent] = useState('');
     const [metadata, setMetadata] = useState({
         proxy: '',
@@ -29,6 +37,9 @@ export default function InventoryForm({ products }: InventoryFormProps) {
         data?: { added: number; duplicates: number };
     } | null>(null);
 
+    const activeProduct = products.find(p => p.id === selectedProduct);
+    const hasVariants = activeProduct && activeProduct.variants && activeProduct.variants.length > 0;
+
     const handleUpload = async () => {
         if (!selectedProduct || !content.trim()) {
             setResult({
@@ -38,28 +49,42 @@ export default function InventoryForm({ products }: InventoryFormProps) {
             return;
         }
 
+        if (hasVariants && !selectedVariant) {
+            setResult({
+                success: false,
+                message: 'Vui lòng chọn loại sản phẩm (biến thể)',
+            });
+            return;
+        }
+
         setIsLoading(true);
         setResult(null);
 
         try {
+            const body: any = {
+                productId: selectedProduct,
+                content,
+                metadata: Object.fromEntries(
+                    Object.entries(metadata).filter(([_, v]) => v.trim() !== '')
+                ),
+            };
+
+            if (selectedVariant) {
+                body.variantId = selectedVariant;
+            }
+
             const response = await fetch('/api/inventory/bulk-upload', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    productId: selectedProduct,
-                    content,
-                    metadata: Object.fromEntries(
-                        Object.entries(metadata).filter(([_, v]) => v.trim() !== '')
-                    ),
-                }),
+                body: JSON.stringify(body),
             });
 
+            // ... (rest of function)
             const data = await response.json();
             setResult(data);
 
             if (data.success) {
                 setContent('');
-                // Maybe refresh page to show new stats?
             }
         } catch (error) {
             setResult({
@@ -78,24 +103,51 @@ export default function InventoryForm({ products }: InventoryFormProps) {
             {/* Upload Form */}
             <div className="lg:col-span-2 space-y-4">
                 {/* Product Selection */}
-                <div className="rounded-xl bg-slate-800/50 border border-slate-700/50 p-6">
-                    <label className="block text-sm font-medium text-slate-300 mb-2">
-                        Chọn sản phẩm
-                    </label>
-                    <select
-                        value={selectedProduct || ''}
-                        onChange={(e) => setSelectedProduct(Number(e.target.value) || null)}
-                        className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg
-            text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500
-            transition-all duration-200"
-                    >
-                        <option value="">-- Chọn sản phẩm --</option>
-                        {products.map((product) => (
-                            <option key={product.id} value={product.id}>
-                                {product.name} ({product.stock} trong kho)
-                            </option>
-                        ))}
-                    </select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="rounded-xl bg-slate-800/50 border border-slate-700/50 p-6">
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                            Chọn sản phẩm
+                        </label>
+                        <select
+                            value={selectedProduct || ''}
+                            onChange={(e) => {
+                                setSelectedProduct(Number(e.target.value) || null);
+                                setSelectedVariant(null); // Reset variant
+                            }}
+                            className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg
+                text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500
+                transition-all duration-200"
+                        >
+                            <option value="">-- Chọn sản phẩm --</option>
+                            {products.map((product) => (
+                                <option key={product.id} value={product.id}>
+                                    {product.name} ({product.stock})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Variant Selection if available */}
+                    <div className={`rounded-xl bg-slate-800/50 border border-slate-700/50 p-6 transition-opacity ${hasVariants ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                            Chọn loại (Biến thể)
+                        </label>
+                        <select
+                            value={selectedVariant || ''}
+                            onChange={(e) => setSelectedVariant(Number(e.target.value) || null)}
+                            disabled={!hasVariants}
+                            className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg
+                text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500
+                transition-all duration-200 disabled:opacity-50"
+                        >
+                            <option value="">-- {hasVariants ? 'Chọn biến thể' : 'Không có biến thể'} --</option>
+                            {hasVariants && activeProduct?.variants?.map((variant) => (
+                                <option key={variant.id} value={variant.id}>
+                                    {variant.name} ({variant.stock} trong kho)
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 {/* Content Textarea */}

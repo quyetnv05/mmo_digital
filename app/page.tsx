@@ -1,41 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { ShoppingCart, Package, Shield, Zap, Star, ChevronRight, Loader2, CheckCircle, AlertCircle, User } from 'lucide-react';
+import { ShoppingCart, Package, Shield, Zap, Star, ChevronRight, ChevronLeft, Loader2, CheckCircle, AlertCircle, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 
-function AuthButtons() {
-    const fetcher = (url: string) => fetch(url).then(res => res.json());
-    const { data, isLoading } = useSWR('/api/auth/me', fetcher);
-    // data structure based on auth/me api: { success: true, user: {...} }
-
-    if (isLoading) return <div className="w-24 h-8 bg-slate-800 animate-pulse rounded-lg"></div>;
-
-    if (data?.success && data?.user) {
-        return (
-            <Link href="/dashboard" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg transition-all flex items-center gap-2 border border-slate-700">
-                <User size={18} className="text-blue-400" />
-                <span>Dashboard ({new Intl.NumberFormat('vi-VN').format(data.user.balance)}đ)</span>
-            </Link>
-        );
-    }
-
-    return (
-        <>
-            <Link href="/auth/login" className="text-slate-400 hover:text-white transition-colors">
-                Đăng nhập
-            </Link>
-            <Link href="/auth/register" className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium rounded-lg hover:from-blue-500 hover:to-purple-500 transition-all">
-                Đăng ký
-            </Link>
-        </>
-    );
-}
-
 // ProductCard is now imported from @/components/ProductCard
 import ProductCard, { Product } from '@/components/ProductCard';
+import Header from '@/components/layout/Header';
 
 // Hero Section & Categories (Unchanged)
 function HeroSection() {
@@ -178,6 +151,10 @@ export default function HomePage() {
     const [sort, setSort] = useState('newest');
     const [inStockOnly, setInStockOnly] = useState(false);
 
+    // Pagination Custom State
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+
     // Fetch user's wishlist on mount
     useEffect(() => {
         fetch('/api/wishlist')
@@ -191,17 +168,26 @@ export default function HomePage() {
             .catch(() => { }); // Silently fail if not logged in
     }, []);
 
-    // Debounce Search
+    // Debounce Search & Reset Page
     useEffect(() => {
+        setPage(1); // Reset to page 1 on filter change
         const timer = setTimeout(() => {
-            fetchProducts();
+            fetchProducts(1);
         }, 500);
         return () => clearTimeout(timer);
     }, [search, activeCategory, maxPrice, minPrice, sort, inStockOnly]);
 
-    const fetchProducts = () => {
+    // Fetch on Page Change
+    useEffect(() => {
+        fetchProducts(page);
+    }, [page]);
+
+    const fetchProducts = (pageIndex: number) => {
         setIsLoading(true);
         const params = new URLSearchParams();
+        params.append('page', pageIndex.toString());
+        params.append('limit', '12'); // 12 items per page
+
         if (search) params.append('search', search);
         if (activeCategory !== 0) params.append('categoryId', activeCategory.toString());
         if (minPrice) params.append('minPrice', minPrice);
@@ -214,6 +200,9 @@ export default function HomePage() {
             .then(data => {
                 if (data.success) {
                     setProducts(data.data);
+                    if (data.pagination) {
+                        setTotalPages(data.pagination.totalPages);
+                    }
                 }
             })
             .finally(() => setIsLoading(false));
@@ -222,22 +211,7 @@ export default function HomePage() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
             {/* Header */}
-            <header className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-lg border-b border-slate-700/50">
-                <div className="max-w-7xl mx-auto px-4 lg:px-8">
-                    <div className="flex items-center justify-between h-16">
-                        <Link href="/" className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                                <span className="text-white font-bold text-sm">M</span>
-                            </div>
-                            <span className="text-white font-semibold text-lg">MMO Shop</span>
-                        </Link>
-
-                        <div className="flex items-center gap-4">
-                            <AuthButtons />
-                        </div>
-                    </div>
-                </div>
-            </header>
+            <Header />
 
             {/* Main Content */}
             <main className="max-w-7xl mx-auto px-4 lg:px-8 py-8">
@@ -264,21 +238,73 @@ export default function HomePage() {
                         Loading products...
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
-                        {products.length > 0 ? (
-                            products.map((product) => (
-                                <ProductCard
-                                    key={product.id}
-                                    product={product}
-                                    initialWishlistState={wishlistIds.has(product.id)}
-                                />
-                            ))
-                        ) : (
-                            <div className="col-span-full text-center py-12 text-slate-500">
-                                Không tìm thấy sản phẩm nào phù hợp.
+                    <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 min-h-[400px]">
+                            {products.length > 0 ? (
+                                products.map((product) => (
+                                    <ProductCard
+                                        key={product.id}
+                                        product={product}
+                                        initialWishlistState={wishlistIds.has(product.id)}
+                                    />
+                                ))
+                            ) : (
+                                <div className="col-span-full text-center py-12 text-slate-500">
+                                    Không tìm thấy sản phẩm nào phù hợp.
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Pagination UI */}
+                        {products.length > 0 && totalPages > 1 && (
+                            <div className="flex justify-center mt-12 gap-2">
+                                <button
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    disabled={page === 1}
+                                    className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <ChevronLeft size={20} />
+                                </button>
+
+                                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                                    // Show first, last, and current range 
+                                    if (
+                                        pageNum === 1 ||
+                                        pageNum === totalPages ||
+                                        (pageNum >= page - 1 && pageNum <= page + 1)
+                                    ) {
+                                        return (
+                                            <button
+                                                key={pageNum}
+                                                onClick={() => setPage(pageNum)}
+                                                className={`w-10 h-10 rounded-lg font-medium transition-colors
+                                                ${page === pageNum
+                                                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/25'
+                                                        : 'bg-slate-800 border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-700'
+                                                    }`}
+                                            >
+                                                {pageNum}
+                                            </button>
+                                        );
+                                    } else if (
+                                        pageNum === page - 2 ||
+                                        pageNum === page + 2
+                                    ) {
+                                        return <span key={pageNum} className="px-2 py-2 text-slate-600">...</span>;
+                                    }
+                                    return null;
+                                })}
+
+                                <button
+                                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={page === totalPages}
+                                    className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <ChevronRight size={20} />
+                                </button>
                             </div>
                         )}
-                    </div>
+                    </>
                 )}
             </main>
 

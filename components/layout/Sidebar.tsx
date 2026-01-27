@@ -23,6 +23,8 @@ import { useAuth } from '@/components/providers/AuthProvider';
 
 interface SidebarProps {
     userRole: 'BUYER' | 'SELLER' | 'ADMIN';
+    collapsed: boolean;
+    onToggle: () => void;
 }
 
 interface MenuItem {
@@ -67,7 +69,7 @@ const menuItems: MenuItem[] = [
         icon: <Heart size={20} />, // Need to import Heart
         label: 'Yêu thích',
         href: '/dashboard/wishlist',
-        roles: ['BUYER'],
+        roles: ['BUYER', 'SELLER', 'ADMIN'],
     },
     // Seller & Admin only
     {
@@ -121,9 +123,8 @@ const menuItems: MenuItem[] = [
     },
 ];
 
-export default function Sidebar({ userRole }: SidebarProps) {
+export default function Sidebar({ userRole, collapsed, onToggle }: SidebarProps) {
     const pathname = usePathname();
-    const [collapsed, setCollapsed] = useState(false);
     const { logout } = useAuth();
 
     const filteredMenuItems = menuItems.filter((item) =>
@@ -151,7 +152,7 @@ export default function Sidebar({ userRole }: SidebarProps) {
                     </Link>
                 )}
                 <button
-                    onClick={() => setCollapsed(!collapsed)}
+                    onClick={onToggle}
                     className="p-2 rounded-lg hover:bg-slate-700/50 text-slate-400 hover:text-white transition-colors"
                 >
                     {collapsed ? <Menu size={20} /> : <ChevronLeft size={20} />}

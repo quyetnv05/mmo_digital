@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
                         },
                         warrantyHours: true,
                         description: true,
-                        variant: true,
+                        variants: true,
                         _count: {
                             select: {
                                 items: { where: { isSold: false } }, // Stock
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
                     category: p.category.name,
                     warrantyHours: p.warrantyHours,
                     stock: p._count.items,
-                    variant: p.variant,
+                    variants: (p as any).variants, // Type assertion as fallback if types aren't fully regenerated
                     rating: ratingAvg,
                     reviewCount: p._count.reviews
                 }

@@ -21,7 +21,22 @@ export async function GET(req: NextRequest) {
             orderBy: { name: 'asc' },
         });
 
-        const formattedCategories = categories.map((cat) => ({
+        // Deduplicate Record by Name
+        // Logic: If multiple cats have same name, merge them (sum product counts) and keep the first ID found.
+        const uniqueMap = new Map();
+
+        categories.forEach(cat => {
+            const normalizedName = cat.name.trim(); // Normalize name
+            if (uniqueMap.has(normalizedName)) {
+                // Merge counts
+                const existing = uniqueMap.get(normalizedName);
+                existing._count.products += cat._count.products;
+            } else {
+                uniqueMap.set(normalizedName, { ...cat }); // Clone to avoid mutation issues if any
+            }
+        });
+
+        const formattedCategories = Array.from(uniqueMap.values()).map((cat: any) => ({
             id: cat.id,
             name: cat.name,
             slug: cat.slug,

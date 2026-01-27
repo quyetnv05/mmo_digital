@@ -5,6 +5,7 @@ import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { MessageCircle, X, Send, Bot, User, Loader2, Minimize2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useChat } from '@/components/providers/ChatProvider';
 
 interface Message {
     role: 'user' | 'model';
@@ -13,7 +14,8 @@ interface Message {
 
 export default function ChatWidget() {
     const { user } = useAuth();
-    const [isOpen, setIsOpen] = useState(false);
+    const { isOpen, openChat, closeChat } = useChat();
+    // const [isOpen, setIsOpen] = useState(false); // Removed local state
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -31,7 +33,7 @@ export default function ChatWidget() {
     // Reset chat when user changes (Fix history leak)
     useEffect(() => {
         setMessages([]);
-    }, [user?.id]);
+    }, [(user as any)?.id]);
 
     // Handle Send Message
     const handleSend = async (e?: React.FormEvent) => {
@@ -111,7 +113,7 @@ export default function ChatWidget() {
                                 </div>
                             </div>
                             <button
-                                onClick={() => setIsOpen(false)}
+                                onClick={closeChat} // Use context fn
                                 className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors cursor-pointer"
                                 onPointerDown={(e) => e.stopPropagation()} // Prevent drag on close button
                             >
@@ -120,6 +122,8 @@ export default function ChatWidget() {
                         </div>
 
                         {/* Messages Area */}
+
+                        {/* ... (content skipped for brevity, keeping existing structure) ... */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
                             {messages.length === 0 && (
                                 <div className="text-center py-8">
@@ -207,7 +211,7 @@ export default function ChatWidget() {
                 <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    onClick={() => setIsOpen(true)}
+                    onClick={openChat} // Use context fn
                     onPointerDown={(e) => dragControls.start(e)}
                     className="p-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full shadow-lg shadow-blue-500/30 flex items-center gap-2 group transition-all cursor-move touch-none"
                 >

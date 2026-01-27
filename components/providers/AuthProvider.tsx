@@ -1,111 +1,45 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { SessionProvider, useSession, signOut, signIn } from 'next-auth/react';
+import { useContext, createContext } from 'react';
 import { useRouter } from 'next/navigation';
-import useSWR from 'swr';
 
-interface User {
-    id: number;
-    username: string;
-    email: string;
-    role: 'BUYER' | 'SELLER' | 'ADMIN';
-    balance: number;
-    pendingBalance: number;
-}
-
-interface AuthContextType {
-    user: User | null;
-    isLoading: boolean;
-    isError: boolean;
-    login: (token: string, userData: User) => void;
-    logout: () => void;
-    refreshUser: () => void;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
+// 1. The Provider Component
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+    return <SessionProvider>{children}</SessionProvider>;
+}
+
+// 2. Compatibility Hook (Adapting NextAuth to old useAuth interface)
+// This allows existing components using useAuth() to keep working while switching to NextAuth.
+export function useAuth() {
+    const { data: session, status } = useSession();
     const router = useRouter();
-    // We use SWR to fetch user profile if token exists (handled by cookies automatically in API requests)
-    // However, for the initial state or when we manually login, we might want manual control.
-    // Actually, standard SWR approach is good if the /api/auth/profile endpoint exists and uses cookies.
 
-    // We use SWR to fetch user profile if token exists (handled by cookies automatically in API requests)
-    const { data, error, mutate, isLoading: isSwrLoading } = useSWR('/api/auth/profile',
-        (url) => fetch(url).then(res => res.json()),
-        {
-            shouldRetryOnError: false,
-            revalidateOnFocus: false,
-        }
-    );
+    const isLoading = status === 'loading';
+    const isAuthenticated = status === 'authenticated';
 
-    const [user, setUser] = useState<User | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    // Map NextAuth user to your App's User interface
+    const user = session?.user ? {
+        ...session.user,
+        id: (session.user as any).id as string,
+        username: (session.user as any).username || session.user.name,
+        role: (session.user as any).role,
+        balance: (session.user as any).balance,
+    } : null;
 
-    useEffect(() => {
-        if (data && data.success) {
-            setUser(data.user);
-        } else if (error || (data && !data.success)) {
-            setUser(null);
-        }
-        setIsLoading(isSwrLoading);
-    }, [data, error, isSwrLoading]);
-
-    const login = (token: string, userData: User) => {
-        // In a real app with httpOnly cookies, the token is set by the server response header.
-        // If we are handling it manually (e.g. storing in localStorage - which is less secure but common), we would do it here.
-        // Since our API `login` sets the token in the response body, let's assume we might depend on a cookie-setting API or client-side storage?
-        // Looking at previous `login/route.ts`, it returns the token in the body but doesn't explicitly set a cookie header in the provided snippet?
-        // Wait, the middleware checks `request.cookies.get('token')`.
-        // The previous `login` route implementation I saw returned `{ token, user }` JSON but didn't set `Set-Cookie` header.
-        // WE NEED TO FIX THIS. Client needs to set the cookie or Server needs to set it.
-        // For simplicity in this "next.js" environment, usually server actions or API routes set cookies.
-        // I will stick to the plan: Modify Login mechanism slightly if needed, or just set cookie via js-cookie here for now to make it work quickly with middleware.
-
-        // For now, let's simulate setting cookie if the server didn't (though server SHOULD).
-        document.cookie = `auth_token=${token}; path=/; max-age=604800; SameSite=Lax`; // simple cookie set
-        setUser(userData);
-        mutate(); // Refresh SWR
-        router.push('/dashboard');
+    const login = () => {
+        signIn(); // Redirects to NextAuth login page
     };
 
     const logout = async () => {
-        try {
-            await fetch('/api/auth/logout', { method: 'POST' });
-        } catch (e) {
-            console.error('Logout API call failed', e);
-        }
-        // Clear cookie
-        document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-        setUser(null);
-        mutate(null, false); // Clear SWR cache
-        router.push('/auth/login');
+        await signOut({ callbackUrl: '/auth/login' });
     };
 
-    const refreshUser = () => {
-        mutate();
+    return {
+        user,
+        isLoading,
+        isAuthenticated,
+        login,
+        logout,
     };
-
-    return (
-        <AuthContext.Provider
-            value={{
-                user,
-                isLoading,
-                isError: !!error,
-                login,
-                logout,
-                refreshUser,
-            }}
-        >
-            {children}
-        </AuthContext.Provider>
-    );
-}
-
-export function useAuth() {
-    const context = useContext(AuthContext);
-    if (context === undefined) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
-    return context;
 }

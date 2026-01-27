@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Loader2, DollarSign, Clock, Package, AlignLeft, Tag, ImagePlus, X } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, DollarSign, Clock, Package, AlignLeft, Tag, ImagePlus, X, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'react-hot-toast';
 
@@ -20,11 +20,12 @@ export default function CreateProductPage() {
     const [formData, setFormData] = useState({
         name: '',
         description: '',
-        price: '',
+        price: '0', // Legacy, will be calculated
         categoryId: '',
         warrantyHours: '24',
-        variant: '',
-        imageUrl: ''
+        variant: '', // Legacy
+        imageUrl: '',
+        variants: [{ name: '', price: '' }] as { name: string, price: string }[]
     });
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -94,17 +95,33 @@ export default function CreateProductPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Validate Variants
+        if (formData.variants.length === 0) {
+            toast.error('Vui lòng thêm ít nhất 1 loại sản phẩm');
+            return;
+        }
+
+        const validVariants = formData.variants.filter(v => v.name && v.price);
+        if (validVariants.length === 0) {
+            toast.error('Vui lòng nhập đầy đủ thông tin loại sản phẩm');
+            return;
+        }
+
         setIsLoading(true);
 
         try {
             const body = {
                 name: formData.name,
                 description: formData.description,
-                price: parseFloat(formData.price),
+                price: parseFloat(validVariants[0].price), // Default base price for parsing logic on server
                 categoryId: parseInt(formData.categoryId),
                 warrantyHours: parseInt(formData.warrantyHours),
-                variant: formData.variant,
-                imageUrl: formData.imageUrl || undefined
+                imageUrl: formData.imageUrl || undefined,
+                variants: validVariants.map(v => ({
+                    name: v.name,
+                    price: parseFloat(v.price)
+                }))
             };
 
             const res = await fetch('/api/products', {
@@ -244,26 +261,82 @@ export default function CreateProductPage() {
                 <div className="space-y-4">
                     <h3 className="text-lg font-medium text-white flex items-center gap-2">
                         <DollarSign size={20} className="text-green-400" />
-                        Giá bán & Bảo hành
+                        Giá bán & Biến thể
                     </h3>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-300">Giá bán (VNĐ) <span className="text-red-500">*</span></label>
-                            <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold">₫</span>
-                                <input
-                                    required
-                                    type="number"
-                                    min="1000"
-                                    name="price"
-                                    value={formData.price}
-                                    onChange={handleChange}
-                                    placeholder="0"
-                                    className="w-full pl-8 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-colors"
-                                />
-                            </div>
+                    <div className="space-y-4 bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium text-slate-300">Các loại sản phẩm (Biến thể)</label>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setFormData(prev => {
+                                        const currentVariants = (prev as any).variants || [];
+                                        return {
+                                            ...prev,
+                                            variants: [...currentVariants, { name: '', price: '' }]
+                                        };
+                                    });
+                                }}
+                                className="text-xs flex items-center gap-1 bg-blue-600/20 text-blue-400 px-2 py-1 rounded hover:bg-blue-600/30 transition-colors"
+                            >
+                                <Plus size={14} /> Thêm loại
+                            </button>
                         </div>
+
+                        {(!((formData as any).variants) || (formData as any).variants.length === 0) && (
+                            <div className="text-center p-4 border border-dashed border-slate-700 rounded text-slate-500 text-sm">
+                                Chưa có biến thể. Thêm ít nhất 1 loại.
+                            </div>
+                        )}
+
+                        {((formData as any).variants || []).map((variant: any, index: number) => (
+                            <div key={index} className="flex gap-3 items-start">
+                                <div className="flex-1 space-y-1">
+                                    <input
+                                        placeholder="Tên loại (VD: 1 Tháng)"
+                                        value={variant.name}
+                                        onChange={(e) => {
+                                            const newVariants = [...((formData as any).variants || [])];
+                                            newVariants[index].name = e.target.value;
+                                            setFormData(prev => ({ ...prev, variants: newVariants }));
+                                        }}
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded text-sm text-white focus:border-blue-500 outline-none"
+                                        required
+                                    />
+                                </div>
+                                <div className="w-40 space-y-1 relative">
+                                    <span className="absolute left-3 top-2 text-slate-500 text-xs font-bold">₫</span>
+                                    <input
+                                        type="number"
+                                        placeholder="Giá"
+                                        value={variant.price}
+                                        onChange={(e) => {
+                                            const newVariants = [...((formData as any).variants || [])];
+                                            newVariants[index].price = e.target.value;
+                                            setFormData(prev => ({ ...prev, variants: newVariants }));
+                                        }}
+                                        className="w-full pl-6 pr-3 py-2 bg-slate-800 border border-slate-600 rounded text-sm text-white focus:border-blue-500 outline-none"
+                                        required
+                                        min="1000"
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const newVariants = ((formData as any).variants || []).filter((_: any, i: number) => i !== index);
+                                        setFormData(prev => ({ ...prev, variants: newVariants }));
+                                    }}
+                                    className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-500/10 rounded transition-colors"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Hidden Price field for fallback logic if needed, but we rely on variants now */}
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-slate-300">Bảo hành (Giờ)</label>
                             <div className="relative">
@@ -278,16 +351,6 @@ export default function CreateProductPage() {
                                     className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-colors"
                                 />
                             </div>
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-300">Loại/Variant (Optional)</label>
-                            <input
-                                name="variant"
-                                value={formData.variant}
-                                onChange={handleChange}
-                                placeholder="Ví dụ: Premium, Standard..."
-                                className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-blue-500 transition-colors"
-                            />
                         </div>
                     </div>
                 </div>
