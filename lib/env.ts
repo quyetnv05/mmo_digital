@@ -20,7 +20,7 @@ const envSchema = z.object({
     UPSTASH_REDIS_REST_TOKEN: z.string().min(1, "Upstash Token is required"),
 
     // AI (Gemini)
-    NEXT_PUBLIC_GEMINI_API_KEY: z.string().min(1, "Gemini API Key is required"),
+    NEXT_PUBLIC_GEMINI_API_KEY: z.string().optional(),
 
     // Node Env
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
