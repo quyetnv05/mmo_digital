@@ -2,6 +2,7 @@ import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/prisma';
 import { verifyPassword } from '@/lib/auth/password';
+import { env } from '@/lib/env';
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -92,5 +93,5 @@ export const authOptions: NextAuthOptions = {
             return session;
         }
     },
-    secret: process.env.NEXTAUTH_SECRET,
+    secret: env.NEXTAUTH_SECRET,
 };
